@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "MyErrandApp",
+    "slug": "myerrandapp",
+    "scheme": "myerrandapp", 
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "image": "./assets/icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.yourcompany.myerrandapp"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.yourcompany.myerrandapp"
+    },
+    "web": {
+      "favicon": "./assets/icon.png"
+    }
+  }
+}
