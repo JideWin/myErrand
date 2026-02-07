@@ -11,7 +11,7 @@ import {
   Alert,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { FirebaseRecaptchaVerifier } from "expo-firebase-recaptcha";
+// import { FirebaseRecaptchaVerifier } from "expo-firebase-recaptcha";
 import { useAuth } from "../context/AuthContext";
 import { auth } from "../config/firebase"; // Import the auth object
 import { CustomText } from "../components/CustomText";

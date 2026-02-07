@@ -11,30 +11,30 @@ import {
   where,
   orderBy,
   onSnapshot,
-  serverTimestamp, // Import serverTimestamp
-  writeBatch, // Import writeBatch
+  serverTimestamp,
+  writeBatch,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 
 export const firebaseTaskService = {
-  // Create a new task
+  // --- EXISTING TASK FUNCTIONS ---
+
   createTask: async (taskData) => {
     try {
       const taskRef = await addDoc(collection(db, "tasks"), {
         ...taskData,
-        createdAt: serverTimestamp(), // Use server timestamp
+        createdAt: serverTimestamp(),
         status: "pending",
         assignedTo: null,
         completedAt: null,
+        bidsCount: 0, // Track number of bids
       });
-
       return { id: taskRef.id, ...taskData };
     } catch (error) {
       throw error.message;
     }
   },
 
-  // Get tasks for client (example of a non-listener fetch)
   getClientTasks: async (userId, status = "") => {
     try {
       let q;
@@ -43,16 +43,15 @@ export const firebaseTaskService = {
           collection(db, "tasks"),
           where("clientId", "==", userId),
           where("status", "==", status),
-          orderBy("createdAt", "desc")
+          orderBy("createdAt", "desc"),
         );
       } else {
         q = query(
           collection(db, "tasks"),
           where("clientId", "==", userId),
-          orderBy("createdAt", "desc")
+          orderBy("createdAt", "desc"),
         );
       }
-
       const querySnapshot = await getDocs(q);
       return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
     } catch (error) {
@@ -60,130 +59,85 @@ export const firebaseTaskService = {
     }
   },
 
-  // Real-time listener for tasks for a specific client
   listenToClientTasks: (userId, callback) => {
     const q = query(
       collection(db, "tasks"),
       where("clientId", "==", userId),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
-
     return onSnapshot(q, (snapshot) => {
       const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       callback(tasks);
     });
   },
 
-  // Get available tasks for taskers (Non-listener)
-  getAvailableTasks: async (filters = {}) => {
-    try {
-      let q = query(
-        collection(db, "tasks"),
-        where("status", "==", "pending"),
-        orderBy("createdAt", "desc")
-      );
-
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-      throw error.message;
-    }
-  },
-
-  // --- NEW ---
-  // Real-time listener for available tasks for taskers
   listenToAvailableTasks: (callback) => {
     const q = query(
       collection(db, "tasks"),
       where("status", "==", "pending"),
-      orderBy("createdAt", "desc")
+      orderBy("createdAt", "desc"),
     );
-
     return onSnapshot(q, (snapshot) => {
       const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       callback(tasks);
     });
   },
 
-  // Accept a task (Instant Accept) - UPDATED
-  acceptTask: async (taskId, tasker) => {
-    try {
-      const taskRef = doc(db, "tasks", taskId);
-      await updateDoc(taskRef, {
-        status: "accepted",
-        assignedTo: tasker.uid,
-        taskerName: `${tasker.firstName} ${tasker.lastName}`,
-        taskerPhoto: tasker.photoURL || null,
-        acceptedAt: serverTimestamp(), // Use server timestamp
-      });
-    } catch (error) {
-      console.error("Error accepting task:", error);
-      throw new Error("Failed to accept task.");
-    }
-  },
-
-  // Update task status
   updateTaskStatus: async (taskId, status) => {
     try {
       const taskRef = doc(db, "tasks", taskId);
       const updateData = { status };
-
       if (status === "completed") {
-        updateData.completedAt = serverTimestamp(); // Use server timestamp
+        updateData.completedAt = serverTimestamp();
       }
-
       await updateDoc(taskRef, updateData);
     } catch (error) {
       throw error.message;
     }
   },
 
-  // Real-time listener for tasks (general, might be for tasker)
-  listenToTasks: (userId, callback) => {
-    const q = query(
-      collection(db, "tasks"),
-      where("clientId", "==", userId), // This is still client-focused, adjust as needed
-      orderBy("createdAt", "desc")
-    );
-
-    return onSnapshot(q, (snapshot) => {
-      const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      callback(tasks);
-    });
-  },
-
-  // --- NEW BIDDING FUNCTIONS ---
+  // --- IMPROVED BIDDING FUNCTIONS (USING SUBCOLLECTIONS) ---
 
   /**
-   * Creates a new bid for a task.
-   * @param {object} bidData - Data for the new bid.
-   * { taskId, taskerId, taskerName, taskerPhoto, bidAmount, message }
+   * Submit a bid to a specific task (Subcollection: tasks/{taskId}/bids)
    */
-  createBid: async (bidData) => {
+  submitBid: async (
+    taskId,
+    taskerId,
+    amount,
+    note,
+    taskerName,
+    taskerPhoto,
+  ) => {
     try {
-      const bidsCollection = collection(db, "bids");
-      await addDoc(bidsCollection, {
-        ...bidData,
+      const bidsRef = collection(db, "tasks", taskId, "bids");
+      await addDoc(bidsRef, {
+        taskerId,
+        taskerName,
+        taskerPhoto: taskerPhoto || null,
+        amount: parseFloat(amount),
+        note,
         createdAt: serverTimestamp(),
-        status: "pending", // 'pending', 'accepted', 'rejected'
+        status: "pending",
       });
+
+      // Optional: Increment bid count on main task
+      // await updateDoc(doc(db, "tasks", taskId), { bidsCount: increment(1) });
+
+      return { success: true };
     } catch (error) {
-      console.error("Error creating bid:", error);
-      throw new Error("Failed to create bid.");
+      console.error("Error submitting bid:", error);
+      throw error;
     }
   },
 
   /**
-   * Listens for real-time bids on a specific task.
-   * @param {string} taskId - The ID of the task.
-   * @param {function} callback - Function to call with the new bids array.
-   * @returns {function} - The unsubscribe function.
+   * Real-time listener for bids on a specific task
    */
   listenToBidsForTask: (taskId, callback) => {
     const q = query(
-      collection(db, "bids"),
-      where("taskId", "==", taskId),
-      orderBy("createdAt", "asc")
+      collection(db, "tasks", taskId, "bids"), // Targeting subcollection
+      orderBy("amount", "asc"), // Order by lowest price first
     );
 
     return onSnapshot(q, (snapshot) => {
@@ -193,45 +147,44 @@ export const firebaseTaskService = {
   },
 
   /**
-   * Accepts a bid, updates the task, and rejects other bids.
-   * @param {string} taskId - The ID of the task.
-   * @param {object} acceptedBid - The full bid object that was accepted.
+   * Accept a bid: Updates task status and rejects other bids
    */
-  acceptBid: async (taskId, acceptedBid) => {
+  acceptBid: async (taskId, bidId, taskerId, price, taskerName) => {
     try {
-      // 1. Update the task document
+      const batch = writeBatch(db);
+
+      // 1. Update the Main Task
       const taskRef = doc(db, "tasks", taskId);
-      await updateDoc(taskRef, {
+      batch.update(taskRef, {
         status: "accepted",
-        assignedTo: acceptedBid.taskerId,
-        taskerName: acceptedBid.taskerName, // Store tasker name on task
-        taskerPhoto: acceptedBid.taskerPhoto, // Store tasker photo on task
-        price: acceptedBid.bidAmount, // Update task price to the bid amount
+        assignedTo: taskerId,
+        taskerName: taskerName,
+        price: parseFloat(price),
         acceptedAt: serverTimestamp(),
       });
 
-      // 2. Update the accepted bid document
-      const acceptedBidRef = doc(db, "bids", acceptedBid.id);
-      await updateDoc(acceptedBidRef, {
-        status: "accepted",
-      });
+      // 2. Mark the selected bid as accepted
+      const selectedBidRef = doc(db, "tasks", taskId, "bids", bidId);
+      batch.update(selectedBidRef, { status: "accepted" });
 
-      // (Optional but recommended) 3. Reject all other bids for this task
+      // 3. Reject all other bids (Optional but recommended)
       const otherBidsQuery = query(
-        collection(db, "bids"),
-        where("taskId", "==", taskId),
-        where("status", "==", "pending")
+        collection(db, "tasks", taskId, "bids"),
+        where("status", "==", "pending"),
       );
       const otherBidsSnapshot = await getDocs(otherBidsQuery);
 
-      const batch = writeBatch(db); // Use a batch for efficiency
       otherBidsSnapshot.forEach((doc) => {
-        batch.update(doc.ref, { status: "rejected" });
+        if (doc.id !== bidId) {
+          batch.update(doc.ref, { status: "rejected" });
+        }
       });
+
       await batch.commit();
+      return { success: true };
     } catch (error) {
       console.error("Error accepting bid:", error);
-      throw new Error("Failed to accept bid.");
+      throw error;
     }
   },
 };
