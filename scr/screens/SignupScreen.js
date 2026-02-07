@@ -1,222 +1,126 @@
-// src/screens/SignupScreen.js
 import React, { useState } from "react";
-import {
-  View,
-  TextInput,
-  TouchableOpacity,
-  SafeAreaView,
-  StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  Alert,
-} from "react-native";
-import { Ionicons } from "@expo/vector-icons";
+import { View, TextInput, StyleSheet, Alert, ScrollView } from "react-native";
+// FIXED: Modern Safe Area Import
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../context/AuthContext";
 import { CustomText } from "../components/CustomText";
-import { colors } from "../components/theme";
 import Button from "../components/Button";
-import { globalStyles } from "../styles/GlobalStyles";
+import { colors, spacing } from "../components/theme";
 
-const SignupScreen = ({ navigation }) => {
-  const [formData, setFormData] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-  });
-
-  const { signUp, isLoading, error } = useAuth();
-
-  const updateForm = (key, value) => {
-    setFormData({ ...formData, [key]: value });
-  };
+const SignupScreen = ({ route, navigation }) => {
+  const { role } = route.params || { role: "client" };
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [password, setPassword] = useState("");
+  const { signUp, isLoading } = useAuth();
 
   const handleSignup = async () => {
-    // Basic Validation
-    if (
-      !formData.firstName ||
-      !formData.lastName ||
-      !formData.email ||
-      !formData.password ||
-      !formData.phone
-    ) {
-      Alert.alert("Missing Fields", "Please fill in all fields.");
+    if (!name || !email || !password) {
+      Alert.alert("Error", "Please fill in all fields.");
       return;
     }
-    if (formData.password !== formData.confirmPassword) {
-      Alert.alert("Password Mismatch", "Passwords do not match.");
-      return;
-    }
-    if (formData.password.length < 6) {
-      Alert.alert("Weak Password", "Password must be at least 6 characters.");
-      return;
-    }
-
     try {
-      await signUp({
-        email: formData.email,
-        password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        phone: formData.phone,
-        // Role is NOT set here. It is set in RoleSelectionScreen.
-        role: null,
-      });
-      // Navigation is handled by AuthContext or we can explicit move
-      navigation.reset({ index: 0, routes: [{ name: "RoleSelection" }] });
-    } catch (e) {
-      console.error("Signup Error", e);
-      // Error is displayed via AuthContext state usually
+      await signUp(email, password, name, role, phone);
+      // Navigation is handled by AuthContext listener in App.js
+    } catch (error) {
+      Alert.alert("Registration Failed", error.message);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
-        <ScrollView contentContainerStyle={styles.content}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.primary} />
-          </TouchableOpacity>
+      <ScrollView contentContainerStyle={styles.scroll}>
+        <CustomText type="h1" style={styles.title}>
+          Create Account
+        </CustomText>
+        <CustomText style={styles.subtitle}>
+          Sign up as a{" "}
+          <CustomText type="bold" color="primary">
+            {role}
+          </CustomText>
+        </CustomText>
 
-          <View style={{ marginTop: 20, marginBottom: 32 }}>
-            <CustomText type="h2" style={styles.title}>
-              Create Account
-            </CustomText>
-            <CustomText type="body" style={styles.subtitle}>
-              Join myErrand today
-            </CustomText>
-          </View>
-
-          {error && <CustomText style={styles.errorText}>{error}</CustomText>}
-
-          <View style={styles.row}>
-            <View style={{ flex: 1, marginRight: 8 }}>
-              <CustomText style={globalStyles.inputLabel}>
-                First Name
-              </CustomText>
-              <TextInput
-                style={globalStyles.input}
-                placeholder="John"
-                value={formData.firstName}
-                onChangeText={(text) => updateForm("firstName", text)}
-              />
-            </View>
-            <View style={{ flex: 1, marginLeft: 8 }}>
-              <CustomText style={globalStyles.inputLabel}>Last Name</CustomText>
-              <TextInput
-                style={globalStyles.input}
-                placeholder="Doe"
-                value={formData.lastName}
-                onChangeText={(text) => updateForm("lastName", text)}
-              />
-            </View>
-          </View>
-
-          <View style={styles.inputContainer}>
-            <CustomText style={globalStyles.inputLabel}>
-              Email Address
-            </CustomText>
-            <TextInput
-              style={globalStyles.input}
-              placeholder="you@example.com"
-              value={formData.email}
-              onChangeText={(text) => updateForm("email", text)}
-              keyboardType="email-address"
-              autoCapitalize="none"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <CustomText style={globalStyles.inputLabel}>
-              Phone Number
-            </CustomText>
-            <TextInput
-              style={globalStyles.input}
-              placeholder="+234..."
-              value={formData.phone}
-              onChangeText={(text) => updateForm("phone", text)}
-              keyboardType="phone-pad"
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <CustomText style={globalStyles.inputLabel}>Password</CustomText>
-            <TextInput
-              style={globalStyles.input}
-              placeholder="Min 6 chars"
-              value={formData.password}
-              onChangeText={(text) => updateForm("password", text)}
-              secureTextEntry
-            />
-          </View>
-
-          <View style={styles.inputContainer}>
-            <CustomText style={globalStyles.inputLabel}>
-              Confirm Password
-            </CustomText>
-            <TextInput
-              style={globalStyles.input}
-              placeholder="Confirm password"
-              value={formData.confirmPassword}
-              onChangeText={(text) => updateForm("confirmPassword", text)}
-              secureTextEntry
-            />
-          </View>
+        <View style={styles.form}>
+          <TextInput
+            style={styles.input}
+            placeholder="Full Name"
+            value={name}
+            onChangeText={setName}
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Email Address"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Phone Number (Optional)"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            value={password}
+            onChangeText={setPassword}
+            secureTextEntry
+          />
 
           <Button
+            title="Sign Up"
             onPress={handleSignup}
             loading={isLoading}
-            style={{ marginTop: 24 }}
+            style={{ marginTop: 20 }}
+          />
+
+          <TouchableOpacity
+            style={styles.loginLink}
+            onPress={() => navigation.navigate("Login")}
           >
-            Sign Up
-          </Button>
-
-          <View style={styles.footer}>
-            <CustomText style={{ color: colors.gray600 }}>
+            <CustomText align="center" color="gray500">
               Already have an account?{" "}
+              <CustomText color="primary">Login</CustomText>
             </CustomText>
-            <TouchableOpacity onPress={() => navigation.navigate("Login")}>
-              <CustomText style={styles.linkText}>Sign In</CustomText>
-            </TouchableOpacity>
-          </View>
-
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      </KeyboardAvoidingView>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.white },
-  content: { padding: 24, flexGrow: 1 },
-  backButton: { marginBottom: 16 },
-  title: { color: colors.gray900, marginBottom: 8 },
-  subtitle: { color: colors.gray500 },
-  errorText: { color: colors.error, textAlign: "center", marginBottom: 16 },
-
-  row: { flexDirection: "row", marginBottom: 16 },
-  inputContainer: { marginBottom: 16 },
-
-  linkText: {
-    color: colors.primary,
-    fontWeight: "600",
-    textAlign: "center",
+  container: {
+    flex: 1,
+    backgroundColor: colors.white,
   },
-  footer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    marginTop: 24,
-    marginBottom: 20,
+  scroll: {
+    padding: spacing.lg,
+  },
+  title: {
+    marginBottom: spacing.xs,
+  },
+  subtitle: {
+    marginBottom: spacing.xl,
+    color: colors.gray500,
+  },
+  form: {
+    marginTop: spacing.sm,
+  },
+  input: {
+    backgroundColor: colors.gray50,
+    padding: spacing.md,
+    borderRadius: 8,
+    marginBottom: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  loginLink: {
+    marginTop: spacing.lg,
   },
 });
 

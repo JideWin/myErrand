@@ -1,89 +1,38 @@
-// src/components/CustomText.js - Enhanced version
 import React from "react";
 import { Text, StyleSheet } from "react-native";
-import { colors } from "./theme"
-const CustomText = ({
-  style,
+import { colors } from "./theme";
+
+export const CustomText = ({
   children,
+  style,
   type = "body",
-  weight = "regular",
-  color = "gray800",
-  align = "left",
-  ...props
+  color = "black",
 }) => {
-  const getStyles = () => {
-    const baseStyle = {
-      color: colors[color] || color,
-      textAlign: align,
-    };
-
-    switch (type) {
-      case "h1":
-        return {
-          ...baseStyle,
-          fontSize: 42,
-          lineHeight: 40,
-          fontWeight: "bold",
-        };
-      case "h2":
-        return {
-          ...baseStyle,
-          fontSize: 28,
-          lineHeight: 36,
-          fontWeight: "bold",
-        };
-      case "h3":
-        return {
-          ...baseStyle,
-          fontSize: 24,
-          lineHeight: 32,
-          fontWeight: "600",
-        };
-      case "h4":
-        return {
-          ...baseStyle,
-          fontSize: 20,
-          lineHeight: 28,
-          fontWeight: "600",
-        };
-      case "title":
-        return {
-          ...baseStyle,
-          fontSize: 18,
-          lineHeight: 24,
-          fontWeight: "600",
-        };
-      case "body":
-        return {
-          ...baseStyle,
-          fontSize: 16,
-          lineHeight: 24,
-          fontWeight: "400",
-        };
-      case "caption":
-        return {
-          ...baseStyle,
-          fontSize: 14,
-          lineHeight: 20,
-          fontWeight: "400",
-        };
-      case "small":
-        return {
-          ...baseStyle,
-          fontSize: 12,
-          lineHeight: 16,
-          fontWeight: "400",
-        };
-      default:
-        return baseStyle;
-    }
-  };
-
   return (
-    <Text style={[getStyles(), style]} {...props}>
+    <Text style={[styles[type], { color: colors[color] || color }, style]}>
       {children}
     </Text>
   );
 };
 
-export { CustomText, colors };
+const styles = StyleSheet.create({
+  h1: {
+    fontSize: 28,
+    fontFamily: "Poppins-Bold",
+    fontWeight: "bold",
+  },
+  h2: {
+    fontSize: 22,
+    fontFamily: "Poppins-SemiBold",
+    fontWeight: "600",
+  },
+  body: {
+    fontSize: 16,
+    fontFamily: "Poppins-Regular",
+  },
+  caption: {
+    fontSize: 12,
+    fontFamily: "Poppins-Light",
+    color: colors.gray500,
+  },
+});

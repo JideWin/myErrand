@@ -1,26 +1,42 @@
-// Update your GlobalStyles.js or create a theme.js
-export const colors = {
-  primary: "#008080", // Teal - main brand color
-  primaryDark: "#006666", // Darker teal
-  primaryLight: "#00A0A0", // Lighter teal
-  secondary: "#6366F1", // Indigo
-  accent: "#F59E0B", // Amber
-  success: "#10B981", // Green
-  error: "#EF4444", // Red
-  warning: "#F59E0B", // Amber
+// scr/components/theme.js
 
-  // Neutrals
-  black: "#000000",
+export const colors = {
+  primary: "#008080", // Teal
+  primaryDark: "#006666",
+  primaryLight: "#E0F2F2",
+  secondary: "#1F2937", // Navy
+  accent: "#F59E0B", // Amber
+  success: "#10B981",
+  error: "#EF4444",
   white: "#FFFFFF",
   gray50: "#F9FAFB",
   gray100: "#F3F4F6",
   gray200: "#E5E7EB",
-  gray300: "#D1D5DB",
-  gray400: "#9CA3AF",
   gray500: "#6B7280",
-  gray600: "#4B5563",
-  gray700: "#374151",
   gray800: "#1F2937",
-  gray900: "#111827",
-  error: "#EF4444", // Red for errors
+};
+
+export const spacing = {
+  xs: 4,
+  sm: 8,
+  md: 16,
+  lg: 24,
+  xl: 32,
+};
+
+export const shadows = {
+  light: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  medium: {
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 4,
+  },
 };

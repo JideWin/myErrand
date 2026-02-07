@@ -1,65 +1,60 @@
-// OPEN: src/screens/shared/JobDetailsScreen.js
-
-// 1. ADD IMPORTS
-import { useContext } from "react";
-import { AuthContext } from "../../context/AuthContext"; // Ensure correct path
-
-// ... inside the component ...
+import React, { useContext } from "react";
+import { View, StyleSheet, ScrollView } from "react-native";
+import { AuthContext } from "../../context/AuthContext";
+import { CustomText } from "../../components/CustomText";
+import Button from "../../components/Button";
+import { colors, spacing, shadows } from "../../components/theme";
 
 const JobDetailsScreen = ({ navigation, route }) => {
-  // 2. GET USER CONTEXT
   const { user } = useContext(AuthContext);
-
-  // (Existing params logic...)
   const { job } = route.params || {};
 
-  // 3. ADD THIS FUNCTION FOR NAVIGATION
-  const handleLiveStream = () => {
-    const isTasker = user?.uid === job.assignedTaskerId; // OR however you identify the tasker
-    const role = isTasker ? "broadcaster" : "audience";
-
-    navigation.navigate("LiveStream", {
-      taskId: job.id,
-      role: role,
-    });
-  };
-
   return (
-    <SafeAreaView style={globalStyles.container}>
-      {/* ... Existing UI ... */}
+    <ScrollView style={{ flex: 1, backgroundColor: colors.gray50 }}>
+      <View style={[styles.mainCard, shadows.medium]}>
+        <CustomText type="h2" color="primary">
+          {job?.title}
+        </CustomText>
+        <CustomText style={styles.desc}>{job?.description}</CustomText>
+        <View style={styles.divider} />
+        <CustomText type="title">
+          Budget: ₦{job?.price || job?.budget}
+        </CustomText>
+      </View>
 
-      {/* 4. ADD THE BUTTON (Ideally above the 'Cancel' or 'Complete' buttons) */}
-
-      {job.status === "in-progress" && (
-        <View style={{ padding: 16 }}>
-          <TouchableOpacity
-            onPress={handleLiveStream}
-            style={{
-              backgroundColor: "#ef4444", // Red for LIVE
-              padding: 16,
-              borderRadius: 12,
-              flexDirection: "row",
-              justifyContent: "center",
-              alignItems: "center",
-              marginBottom: 10,
-            }}
-          >
-            <Ionicons
-              name="videocam"
-              size={24}
-              color="#fff"
-              style={{ marginRight: 8 }}
-            />
-            <CustomText style={{ color: "#fff", fontWeight: "bold" }}>
-              {user?.uid === job.assignedTaskerId
-                ? "Start Live Stream"
-                : "Watch Tasker Live"}
-            </CustomText>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* ... Rest of UI ... */}
-    </SafeAreaView>
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Start Live Stream"
+          onPress={() =>
+            navigation.navigate("LiveStream", { channelName: job.id })
+          }
+          style={{ backgroundColor: colors.primary }}
+        />
+      </View>
+    </ScrollView>
   );
 };
+
+const styles = StyleSheet.create({
+  mainCard: {
+    backgroundColor: colors.white,
+    margin: spacing.md,
+    padding: spacing.lg,
+    borderRadius: 15,
+  },
+  desc: {
+    marginTop: 10,
+    lineHeight: 22,
+    color: colors.gray800,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: colors.gray200,
+    marginVertical: 15,
+  },
+  buttonContainer: {
+    padding: spacing.md,
+  },
+});
+
+export default JobDetailsScreen;
