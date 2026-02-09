@@ -1,44 +1,74 @@
 import React from "react";
-import { View, StyleSheet, TouchableOpacity } from "react-native";
-// FIXED: Modern Safe Area Import
+import { View, StyleSheet, TouchableOpacity, Image } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CustomText } from "../components/CustomText";
-import { colors, spacing, shadows } from "../components/theme";
+import { colors, spacing } from "../components/theme";
+import Icon from "../components/Icon";
 
 const RoleSelectionScreen = ({ navigation }) => {
-  const selectRole = (role) => {
-    navigation.navigate("Signup", { role });
-  };
-
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <CustomText type="h1" align="center">Choose Your Role</CustomText>
-        <CustomText align="center" color="gray500" style={styles.subtitle}>
+      <View style={styles.content}>
+        <CustomText
+          type="h1"
+          align="center"
+          color="primary"
+          style={styles.title}
+        >
           How do you want to use MyErrand?
         </CustomText>
-      </View>
 
-      <View style={styles.cardContainer}>
+        {/* OPTION 1: CLIENT */}
         <TouchableOpacity
           style={styles.card}
-          onPress={() => selectRole("client")}
-          activeOpacity={0.8}
+          onPress={() => navigation.navigate("Signup", { role: "client" })}
         >
-          <CustomText type="h2" color="primary">I need help</CustomText>
-          <CustomText align="center" style={styles.cardDesc}>
-            Hire runners to run errands, deliver packages, or help with tasks.
-          </CustomText>
+          <View
+            style={[styles.iconBox, { backgroundColor: colors.primary + "20" }]}
+          >
+            <Icon name="person" size={32} color={colors.primary} />
+          </View>
+          <View style={styles.textContainer}>
+            <CustomText type="h3" color="primary">
+              I need help
+            </CustomText>
+            <CustomText color="gray500">
+              I want to post errands and hire workers.
+            </CustomText>
+          </View>
+          <Icon name="chevron-forward" size={24} color={colors.gray400} />
+        </TouchableOpacity>
+
+        {/* OPTION 2: TASKER */}
+        <TouchableOpacity
+          style={[styles.card, styles.taskerCard]}
+          onPress={() => navigation.navigate("Signup", { role: "tasker" })}
+        >
+          <View
+            style={[styles.iconBox, { backgroundColor: colors.accent + "20" }]}
+          >
+            <Icon name="briefcase" size={32} color={colors.accent} />
+          </View>
+          <View style={styles.textContainer}>
+            <CustomText type="h3" color="accent">
+              I want to work
+            </CustomText>
+            <CustomText color="gray500">
+              I want to earn money by completing tasks.
+            </CustomText>
+          </View>
+          <Icon name="chevron-forward" size={24} color={colors.gray400} />
         </TouchableOpacity>
 
         <TouchableOpacity
-          style={styles.card}
-          onPress={() => selectRole("tasker")}
-          activeOpacity={0.8}
+          onPress={() => navigation.navigate("Login")}
+          style={{ marginTop: 20 }}
         >
-          <CustomText type="h2" color="accent">I want to work</CustomText>
-          <CustomText align="center" style={styles.cardDesc}>
-            Earn money by completing errands and tasks for others.
+          <CustomText align="center" color="gray500">
+            Already have an account?{" "}
+            <CustomText type="bold" color="primary">
+              Login
+            </CustomText>
           </CustomText>
         </TouchableOpacity>
       </View>
@@ -47,35 +77,38 @@ const RoleSelectionScreen = ({ navigation }) => {
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: colors.white,
-    padding: spacing.md,
-  },
-  header: {
-    marginTop: spacing.xl,
-    marginBottom: spacing.xl,
-  },
-  subtitle: {
-    marginTop: spacing.sm,
-  },
-  cardContainer: {
-    gap: spacing.md,
-  },
+  container: { flex: 1, backgroundColor: colors.white },
+  content: { flex: 1, padding: spacing.lg, justifyContent: "center" },
+  title: { marginBottom: spacing.xl },
   card: {
-    backgroundColor: colors.gray50,
-    padding: spacing.lg,
-    borderRadius: 16,
+    flexDirection: "row",
     alignItems: "center",
+    padding: spacing.lg,
+    backgroundColor: colors.white,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.gray200,
-    ...shadows.light,
-    marginBottom: 20,
+    marginBottom: spacing.md,
+    // Shadow
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
-  cardDesc: {
-    marginTop: spacing.sm,
-    color: colors.gray500,
+  taskerCard: {
+    borderColor: colors.accent,
+    borderWidth: 1.5,
   },
+  iconBox: {
+    width: 60,
+    height: 60,
+    borderRadius: 30,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: spacing.md,
+  },
+  textContainer: { flex: 1 },
 });
 
 export default RoleSelectionScreen;

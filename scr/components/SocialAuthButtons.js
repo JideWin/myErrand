@@ -1,140 +1,146 @@
-// src/services/socialAuthService.js
+import React, { useEffect } from "react";
+import { View, TouchableOpacity, Text, StyleSheet, Image, Alert } from "react-native";
+import * as WebBrowser from "expo-web-browser";
 import * as Google from "expo-auth-session/providers/google";
 import * as Facebook from "expo-auth-session/providers/facebook";
-import {
-  GoogleAuthProvider,
-  FacebookAuthProvider,
-  signInWithCredential,
-} from "firebase/auth";
+import { ResponseType } from "expo-auth-session";
+import { GoogleAuthProvider, FacebookAuthProvider, signInWithCredential } from "firebase/auth";
 import { auth } from "../config/firebase";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "../config/firebase";
-import * as Linking from "expo-linking";
+import { colors } from "./theme";
 
-export const useSocialAuth = () => {
-  const redirectUri = Linking.createURL("/");
+WebBrowser.maybeCompleteAuthSession();
 
-  // Google configuration
-  const [googleRequest, googleResponse, googlePromptAsync] =
-    Google.useAuthRequest({
-      expoClientId: "451325436790-6q6v8q2q3q4q5q6q7q8q9q0q1q2q3q4q5q6q7q8q9q0", // Replace with your actual client ID
-      iosClientId: "YOUR_IOS_CLIENT_ID", // Replace if needed
-      androidClientId: "YOUR_ANDROID_CLIENT_ID", // Replace if needed
-      webClientId: "YOUR_WEB_CLIENT_ID", // Replace if needed
-      redirectUri,
-    });
+const SocialAuthButtons = () => {
+  // --- GOOGLE CONFIGURATION ---
+  // You need to get these Client IDs from the Google Cloud Console (Firebase Console)
+  const [gRequest, gResponse, gPromptAsync] = Google.useIdTokenAuthRequest({
+    clientId: "YOUR_WEB_CLIENT_ID.apps.googleusercontent.com", // Replace with your Web Client ID
+    iosClientId: "YOUR_IOS_CLIENT_ID.apps.googleusercontent.com", // Optional: For native iOS
+    androidClientId: "YOUR_ANDROID_CLIENT_ID.apps.googleusercontent.com", // Optional: For native Android
+  });
 
-  // Facebook configuration
-  const [facebookRequest, facebookResponse, facebookPromptAsync] =
-    Facebook.useAuthRequest({
-      clientId: "YOUR_FACEBOOK_APP_ID", // Replace with your actual Facebook App ID
-      redirectUri,
-    });
+  // --- FACEBOOK CONFIGURATION ---
+  // You need to get this App ID from developers.facebook.com
+  const [fRequest, fResponse, fPromptAsync] = Facebook.useAuthRequest({
+    clientId: "YOUR_FACEBOOK_APP_ID", // Replace with your Facebook App ID
+    responseType: ResponseType.Token,
+  });
 
-  // Handle social user creation/update
-  const handleSocialUser = async (firebaseUser, provider) => {
-    try {
-      const userRef = doc(db, "users", firebaseUser.uid);
-      const userDoc = await getDoc(userRef);
-
-      let userData;
-
-      if (!userDoc.exists()) {
-        userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          firstName: firebaseUser.displayName?.split(" ")[0] || "User",
-          lastName: firebaseUser.displayName?.split(" ")[1] || "",
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          provider: provider,
-          createdAt: new Date().toISOString(),
-          completedTasks: 0,
-          rating: 5.0,
-          profileCompleted: false,
-          role: "client",
-          phone: "",
-        };
-        await setDoc(userRef, userData);
-      } else {
-        const existingData = userDoc.data();
-        userData = {
-          ...existingData,
-          photoURL: firebaseUser.photoURL || existingData.photoURL,
-          displayName: firebaseUser.displayName || existingData.displayName,
-          provider: provider,
-        };
-        await setDoc(userRef, userData, { merge: true });
-      }
-
-      return userData;
-    } catch (error) {
-      console.error("Error handling social user:", error);
-      throw error;
+  // Handle Google Response
+  useEffect(() => {
+    if (gResponse?.type === "success") {
+      const { id_token } = gResponse.params;
+      const credential = GoogleAuthProvider.credential(id_token);
+      signInWithCredential(auth, credential)
+        .catch((error) => Alert.alert("Google Login Error", error.message));
     }
-  };
+  }, [gResponse]);
 
-  const signInWithGoogle = async () => {
-    try {
-      const result = await googlePromptAsync();
-      console.log("Google auth result:", result);
-
-      if (result.type === "success") {
-        const { id_token } = result.params;
-        const credential = GoogleAuthProvider.credential(id_token);
-        const userCredential = await signInWithCredential(auth, credential);
-
-        const userData = await handleSocialUser(userCredential.user, "google");
-        return { success: true, user: userData };
-      }
-
-      return {
-        success: false,
-        error:
-          result.type === "cancel"
-            ? "Google sign-in cancelled"
-            : "Google sign-in failed",
-      };
-    } catch (error) {
-      console.error("Google sign-in error:", error);
-      return { success: false, error: error.message };
+  // Handle Facebook Response
+  useEffect(() => {
+    if (fResponse?.type === "success") {
+      const { access_token } = fResponse.params;
+      const credential = FacebookAuthProvider.credential(access_token);
+      signInWithCredential(auth, credential)
+        .catch((error) => Alert.alert("Facebook Login Error", error.message));
     }
-  };
+  }, [fResponse]);
 
-  const signInWithFacebook = async () => {
-    try {
-      const result = await facebookPromptAsync();
-      console.log("Facebook auth result:", result);
+  return (
+    <View style={styles.container}>
+      <View style={styles.dividerContainer}>
+        <View style={styles.line} />
+        <Text style={styles.orText}>OR</Text>
+        <View style={styles.line} />
+      </View>
 
-      if (result.type === "success") {
-        const { access_token } = result.params;
-        const credential = FacebookAuthProvider.credential(access_token);
-        const userCredential = await signInWithCredential(auth, credential);
+      <View style={styles.row}>
+        {/* Google Button */}
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => gPromptAsync()}
+          disabled={!gRequest}
+        >
+          <Image 
+            source={require("../../assets/images/google.png")} 
+            style={styles.icon} 
+            resizeMode="contain"
+          />
+          <Text style={styles.text}>Google</Text>
+        </TouchableOpacity>
 
-        const userData = await handleSocialUser(
-          userCredential.user,
-          "facebook"
-        );
-        return { success: true, user: userData };
-      }
-
-      return {
-        success: false,
-        error:
-          result.type === "cancel"
-            ? "Facebook sign-in cancelled"
-            : "Facebook sign-in failed",
-      };
-    } catch (error) {
-      console.error("Facebook sign-in error:", error);
-      return { success: false, error: error.message };
-    }
-  };
-
-  return {
-    signInWithGoogle,
-    signInWithFacebook,
-    googleResponse,
-    facebookResponse,
-  };
+        {/* Facebook Button */}
+        <TouchableOpacity
+          style={[styles.button, styles.facebookButton]}
+          onPress={() => fPromptAsync()}
+          disabled={!fRequest}
+        >
+          <Image 
+            source={require("../../assets/images/facebook.png")} 
+            style={styles.icon} 
+            resizeMode="contain"
+          />
+          <Text style={[styles.text, styles.facebookText]}>Facebook</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 };
+
+const styles = StyleSheet.create({
+  container: {
+    marginVertical: 20,
+    width: '100%',
+  },
+  dividerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  line: {
+    flex: 1,
+    height: 1,
+    backgroundColor: colors.gray200,
+  },
+  orText: {
+    marginHorizontal: 10,
+    color: colors.gray500,
+    fontSize: 14,
+    fontFamily: "Poppins-Medium",
+  },
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 15,
+  },
+  button: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.white,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  facebookButton: {
+    backgroundColor: '#1877F2', // Facebook Blue
+    borderColor: '#1877F2',
+  },
+  icon: {
+    width: 20,
+    height: 20,
+    marginRight: 10,
+  },
+  text: {
+    color: colors.gray800,
+    fontSize: 14,
+    fontFamily: "Poppins-Medium",
+  },
+  facebookText: {
+    color: colors.white,
+  },
+});
+
+export default SocialAuthButtons;

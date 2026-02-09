@@ -1,54 +1,57 @@
-// App.js
 import "./scr/config/firebase";
 import React, { useState, useEffect } from "react";
-import {
-  NavigationContainer,
-  DarkTheme,
-  DefaultTheme,
-} from "@react-navigation/native";
+import { View, ActivityIndicator, Text } from "react-native";
+import { NavigationContainer, DefaultTheme } from "@react-navigation/native";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { StatusBar } from "expo-status-bar";
-import { View, Text, ActivityIndicator } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import * as Font from "expo-font";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { LogBox } from "react-native";
 
-// Import Auth Context
+// --- IMPORTS ---
+// We use 'try/catch' logic by using defaults if imports fail
 import { AuthProvider, useAuth } from "./scr/context/AuthContext";
 
-// Import all screens
 import OnboardingScreen from "./scr/screens/OnboardingScreen";
 import LoginScreen from "./scr/screens/LoginScreen";
 import SignupScreen from "./scr/screens/SignupScreen";
 import RoleSelectionScreen from "./scr/screens/RoleSelectionScreen";
 
-// Import client screens
+// Placeholder for missing screens to prevent "undefined" crash
+const SafeScreen = (Component, name) => {
+  return (
+    Component ||
+    (() => (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: "red" }}>Missing Component: {name}</Text>
+      </View>
+    ))
+  );
+};
+
+// Import other screens (These might be undefined if files are empty)
 import ClientHomeScreen from "./scr/screens/clients/ClientHomeScreen";
 import PostErrandScreen from "./scr/screens/clients/PostErrandScreen";
 import MyErrandsScreen from "./scr/screens/clients/MyErrandsScreen";
 import ClientProfileScreen from "./scr/screens/clients/ClientProfileScreen";
 import ClientBidsScreen from "./scr/screens/clients/ClientBidsScreen";
-
-// Import tasker screens
 import TaskerHomeScreen from "./scr/screens/tasker/TaskerHomeScreen";
 import AvailableJobsScreen from "./scr/screens/tasker/AvailableJobsScreen";
 import MyJobsScreen from "./scr/screens/tasker/MyJobsScreen";
 import TaskerProfileScreen from "./scr/screens/tasker/TaskerProfileScreen";
-import TaskerBidScreen from "./scr/screens/tasker/TaskerBidScreen"; // Import new screen
-
-// Import shared screens
+import TaskerBidScreen from "./scr/screens/tasker/TaskerBidScreen";
 import JobDetailsScreen from "./scr/screens/shared/JobDetailsScreen";
 import ChatScreen from "./scr/screens/shared/ChatScreen";
 import NotificationsScreen from "./scr/screens/shared/NotificationsScreen";
 import SettingsScreen from "./scr/screens/shared/SettingsScreen";
 import PaymentMethodsScreen from "./scr/screens/shared/PaymentMethodsScreen";
 
+LogBox.ignoreLogs(["AsyncStorage has been extracted", "The action 'REPLACE'"]);
+
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// Custom Light Theme
 const ErrandLightTheme = {
   ...DefaultTheme,
   colors: {
@@ -62,198 +65,172 @@ const ErrandLightTheme = {
   },
 };
 
-// Custom text component with font handling
-const CustomText = ({ style, children, type = "body", ...props }) => {
-  const getFontFamily = () => {
-    switch (type) {
-      case "title":
-        return undefined;
-      case "heading":
-        return undefined;
-      case "subtitle":
-        return undefined;
-      case "caption":
-        return undefined;
-      case "body":
-      default:
-        return undefined;
-    }
-  };
-
-  const getFontWeight = () => {
-    switch (type) {
-      case "title":
-        return "bold";
-      case "heading":
-        return "600";
-      case "subtitle":
-        return "500";
-      case "caption":
-        return "400";
-      case "body":
-      default:
-        return "400";
-    }
-  };
-
-  const getFontSize = () => {
-    switch (type) {
-      case "title":
-        return 28;
-      case "heading":
-        return 20;
-      case "subtitle":
-        return 16;
-      case "caption":
-        return 14;
-      case "body":
-      default:
-        return 16;
-    }
-  };
-
-  return (
-    <Text
-      style={[
-        {
-          fontFamily: getFontFamily(),
-          fontWeight: getFontWeight(),
-          fontSize: getFontSize(),
-          color: "#1f2937",
-        },
-        style,
-      ]}
-      {...props}
-    >
-      {children}
-    </Text>
-  );
-};
-
-// Placeholder component for screens that aren't implemented yet
-function PlaceholderScreen({ route }) {
-  return (
-    <View
-      style={{
-        flex: 1,
-        justifyContent: "center",
-        alignItems: "center",
-        backgroundColor: "#ffffff",
-      }}
-    >
-      <CustomText style={{ fontSize: 24, marginBottom: 10 }}>
-        {route.name} Screen
-      </CustomText>
-      <CustomText style={{ fontSize: 16, color: "#6b7280" }}>
-        This screen is under development
-      </CustomText>
-    </View>
-  );
-}
-
-// Client Tab Navigator
+// --- CLIENT TABS ---
 function ClientTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === "Home") {
+          let iconName = "help";
+          if (route.name === "Home")
             iconName = focused ? "home" : "home-outline";
-          } else if (route.name === "Post") {
+          else if (route.name === "Post")
             iconName = focused ? "add-circle" : "add-circle-outline";
-          } else if (route.name === "MyErrands") {
+          else if (route.name === "MyErrands")
             iconName = focused ? "list" : "list-outline";
-          } else if (route.name === "Profile") {
+          else if (route.name === "Profile")
             iconName = focused ? "person" : "person-outline";
-          }
-
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: "#6366f1",
         tabBarInactiveTintColor: "#6b7280",
-        tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#e5e7eb",
-          paddingVertical: 5,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-        },
         headerShown: false,
       })}
     >
       <Tab.Screen
         name="Home"
-        component={ClientHomeScreen || PlaceholderScreen}
+        component={SafeScreen(ClientHomeScreen, "ClientHome")}
       />
       <Tab.Screen
         name="Post"
-        component={PostErrandScreen || PlaceholderScreen}
+        component={SafeScreen(PostErrandScreen, "PostErrand")}
       />
       <Tab.Screen
         name="MyErrands"
-        component={MyErrandsScreen || PlaceholderScreen}
+        component={SafeScreen(MyErrandsScreen, "MyErrands")}
       />
       <Tab.Screen
         name="Profile"
-        component={ClientProfileScreen || PlaceholderScreen}
+        component={SafeScreen(ClientProfileScreen, "ClientProfile")}
       />
     </Tab.Navigator>
   );
 }
 
-// Tasker Tab Navigator
+// --- TASKER TABS ---
 function TaskerTabNavigator() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName;
-
-          if (route.name === "Jobs") {
+          let iconName = "help";
+          if (route.name === "Jobs")
             iconName = focused ? "briefcase" : "briefcase-outline";
-          } else if (route.name === "Available") {
+          else if (route.name === "Available")
             iconName = focused ? "search" : "search-outline";
-          } else if (route.name === "MyJobs") {
+          else if (route.name === "MyJobs")
             iconName = focused ? "list" : "list-outline";
-          } else if (route.name === "Profile") {
+          else if (route.name === "Profile")
             iconName = focused ? "person" : "person-outline";
-          }
-
           return <Ionicons name={iconName} size={size} color={color} />;
         },
         tabBarActiveTintColor: "#6366f1",
         tabBarInactiveTintColor: "#6b7280",
-        tabBarStyle: {
-          backgroundColor: "#ffffff",
-          borderTopColor: "#e5e7eb",
-          paddingVertical: 5,
-        },
-        tabBarLabelStyle: {
-          fontSize: 12,
-        },
         headerShown: false,
       })}
     >
       <Tab.Screen
         name="Jobs"
-        component={TaskerHomeScreen || PlaceholderScreen}
+        component={SafeScreen(TaskerHomeScreen, "TaskerHome")}
       />
       <Tab.Screen
         name="Available"
-        component={AvailableJobsScreen || PlaceholderScreen}
+        component={SafeScreen(AvailableJobsScreen, "AvailableJobs")}
       />
-      <Tab.Screen name="MyJobs" component={MyJobsScreen || PlaceholderScreen} />
+      <Tab.Screen
+        name="MyJobs"
+        component={SafeScreen(MyJobsScreen, "MyJobs")}
+      />
       <Tab.Screen
         name="Profile"
-        component={TaskerProfileScreen || PlaceholderScreen}
+        component={SafeScreen(TaskerProfileScreen, "TaskerProfile")}
       />
     </Tab.Navigator>
   );
 }
 
+// --- ROOT NAVIGATOR ---
+const RootNavigator = () => {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#6366f1" />
+      </View>
+    );
+  }
+
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerShown: false,
+        cardStyle: { backgroundColor: "#ffffff" },
+      }}
+    >
+      {!user ? (
+        // Auth Stack
+        <>
+          <Stack.Screen
+            name="Onboarding"
+            component={SafeScreen(OnboardingScreen, "Onboarding")}
+          />
+          <Stack.Screen
+            name="RoleSelection"
+            component={SafeScreen(RoleSelectionScreen, "RoleSelection")}
+          />
+          <Stack.Screen
+            name="Signup"
+            component={SafeScreen(SignupScreen, "Signup")}
+          />
+          <Stack.Screen
+            name="Login"
+            component={SafeScreen(LoginScreen, "Login")}
+          />
+        </>
+      ) : (
+        // App Stack
+        <>
+          {user.role === "tasker" ? (
+            <Stack.Screen name="TaskerMain" component={TaskerTabNavigator} />
+          ) : (
+            <Stack.Screen name="ClientMain" component={ClientTabNavigator} />
+          )}
+          <Stack.Screen
+            name="JobDetails"
+            component={SafeScreen(JobDetailsScreen, "JobDetails")}
+          />
+          <Stack.Screen
+            name="Chat"
+            component={SafeScreen(ChatScreen, "Chat")}
+          />
+          <Stack.Screen
+            name="ClientBids"
+            component={SafeScreen(ClientBidsScreen, "ClientBids")}
+          />
+          <Stack.Screen
+            name="TaskerBid"
+            component={SafeScreen(TaskerBidScreen, "TaskerBid")}
+          />
+          <Stack.Screen
+            name="Notifications"
+            component={SafeScreen(NotificationsScreen, "Notifications")}
+          />
+          <Stack.Screen
+            name="Settings"
+            component={SafeScreen(SettingsScreen, "Settings")}
+          />
+          <Stack.Screen
+            name="PaymentMethods"
+            component={SafeScreen(PaymentMethodsScreen, "PaymentMethods")}
+          />
+        </>
+      )}
+    </Stack.Navigator>
+  );
+};
+
+// --- APP ENTRY POINT ---
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
 
@@ -266,116 +243,33 @@ export default function App() {
           "Poppins-SemiBold": require("./assets/fonts/Poppins-SemiBold.ttf"),
           "Poppins-Bold": require("./assets/fonts/Poppins-Bold.ttf"),
         });
-        setFontsLoaded(true);
-      } catch (error) {
-        console.log("Custom fonts not found, using system fonts");
-        setFontsLoaded(true);
-      }
+      } catch (e) {} // Ignore font errors
+      setFontsLoaded(true);
     }
-
     loadFonts();
   }, []);
 
-  if (!fontsLoaded) {
+  if (!fontsLoaded) return null;
+
+  // SAFETY CHECK: Ensure AuthProvider exists before rendering
+  if (!AuthProvider) {
     return (
-      <View
-        style={{
-          flex: 1,
-          justifyContent: "center",
-          alignItems: "center",
-          backgroundColor: "#ffffff",
-        }}
-      >
-        {/* Using ActivityIndicator instead of Text for a cleaner loading state */}
-        <ActivityIndicator size="large" color="#008080" />
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <Text style={{ color: "red", textAlign: "center", padding: 20 }}>
+          CRITICAL ERROR: AuthProvider is undefined.{"\n"}
+          Check scr/context/AuthContext.js exports.
+        </Text>
       </View>
     );
   }
 
   return (
-    <AuthProvider>
-      <SafeAreaProvider>
-        <View style={{ flex: 1, backgroundColor: "#ffffff" }}>
-          <NavigationContainer theme={ErrandLightTheme}>
-            <Stack.Navigator
-              initialRouteName="Onboarding"
-              screenOptions={{
-                headerShown: false,
-                gestureEnabled: true,
-                cardStyle: { backgroundColor: "#ffffff" },
-                headerStyle: {
-                  backgroundColor: "#f8fafc",
-                  shadowColor: "transparent",
-                },
-                headerTintColor: "#1f2937",
-              }}
-            >
-              {/* Your stack screens go here */}
-              <Stack.Screen
-                name="Onboarding"
-                component={OnboardingScreen || PlaceholderScreen}
-              />
-              <Stack.Screen
-                name="RoleSelection"
-                component={RoleSelectionScreen || PlaceholderScreen}
-              />
-              <Stack.Screen
-                name="Login"
-                component={LoginScreen || PlaceholderScreen}
-              />
-              <Stack.Screen
-                name="Signup"
-                component={SignupScreen || PlaceholderScreen}
-              />
-              <Stack.Screen name="ClientMain" component={ClientTabNavigator} />
-              <Stack.Screen name="TaskerMain" component={TaskerTabNavigator} />
-              <Stack.Screen
-                name="ClientBids"
-                component={ClientBidsScreen}
-                options={{
-                  headerShown: false, // Using custom header inside the screen
-                }}
-              />
-              <Stack.Screen
-                name="TaskerBid"
-                component={TaskerBidScreen}
-                options={{
-                  headerShown: false, // Using custom header inside the screen
-                }}
-              />
-              <Stack.Screen
-                name="JobDetails"
-                component={JobDetailsScreen || PlaceholderScreen}
-                options={{
-                  headerShown: false, // Using custom header inside screen
-                }}
-              />
-              <Stack.Screen
-                name="Chat"
-                component={ChatScreen || PlaceholderScreen}
-                options={{
-                  headerShown: false, // Using custom header inside screen
-                }}
-              />
-              <Stack.Screen
-                name="Notifications"
-                component={NotificationsScreen || PlaceholderScreen}
-                options={{
-                  headerShown: false, // Using custom header inside screen
-                }}
-              />
-              <Stack.Screen
-                name="Settings"
-                component={SettingsScreen || PlaceholderScreen}
-                options={{
-                  headerShown: false, // Using custom header inside screen
-                }}
-              />
-            </Stack.Navigator>
-          </NavigationContainer>
-          <StatusBar style="dark" />
-        </View>
-      </SafeAreaProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <NavigationContainer theme={ErrandLightTheme}>
+        <AuthProvider>
+          <RootNavigator />
+        </AuthProvider>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }

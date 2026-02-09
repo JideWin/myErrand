@@ -1,346 +1,158 @@
-// src/context/AuthContext.js
 import React, { createContext, useContext, useReducer, useEffect } from "react";
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signOut,
-  updateProfile,
+  signOut as firebaseSignOut,
   onAuthStateChanged,
-  signInWithPhoneNumber, // Import phone auth function
+  updateProfile,
+  sendEmailVerification,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth } from "../config/firebase";
-import { storageService } from "../services/services/storageService";
-import { db } from "../config/firebase";
-import { useSocialAuth } from "../services/socialAuthService";
+import { auth, db } from "../config/firebase";
 
-// Auth reducer
+// 1. Create the Context
+export const AuthContext = createContext();
+
+// 2. Define Initial State
+const initialState = {
+  user: null,
+  isLoading: true,
+};
+
+// 3. Reducer to manage state updates
 const authReducer = (state, action) => {
   switch (action.type) {
-    case "RESTORE_USER":
-    // ... existing code ...
-    case "UPDATE_USER":
-      return {
-        ...state,
-        user: { ...state.user, ...action.payload },
-      };
+    case "SIGN_IN":
+      return { ...state, user: action.payload, isLoading: false };
+    case "SIGN_OUT":
+      return { ...state, user: null, isLoading: false };
+    case "INITIAL_CHECK_DONE":
+      return { ...state, isLoading: false };
     default:
-    // ... existing code ...
+      return state;
   }
 };
 
-// Initial state
-const initialState = {
-  // ... existing code ...
-  error: null,
-};
-
-// Create Auth Context
-const AuthContext = createContext();
-
+// 4. The Provider Component
 export const AuthProvider = ({ children }) => {
   const [state, dispatch] = useReducer(authReducer, initialState);
 
-  const {
-    signInWithGoogle: socialGoogleSignIn,
-    signInWithFacebook: socialFacebookSignIn,
-  } = useSocialAuth();
-
-  // Check for existing user on app start
+  // --- SESSION RESTORATION & LISTENER ---
   useEffect(() => {
-    // ... existing code ...
-    return () => unsubscribe();
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        try {
+          // ANTI-FREEZE: Create a 5-second timeout
+          const timeout = new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Timeout")), 5000),
+          );
+
+          // Race: Try to get profile from DB, but give up after 5s
+          const userDoc = await Promise.race([
+            getDoc(doc(db, "users", firebaseUser.uid)),
+            timeout,
+          ]);
+
+          if (userDoc.exists()) {
+            // Success: User found in DB
+            const userData = userDoc.data();
+            dispatch({
+              type: "SIGN_IN",
+              payload: { ...firebaseUser, ...userData },
+            });
+          } else {
+            // Fallback: User in Auth but not DB -> Force Client Role
+            console.log("User doc not found, using fallback role.");
+            const fallbackUser = { ...firebaseUser, role: "client" };
+            dispatch({ type: "SIGN_IN", payload: fallbackUser });
+          }
+        } catch (error) {
+          console.log(
+            "Login Fallback Triggered (Network/Timeout):",
+            error.message,
+          );
+          // Fallback: Network is slow -> Force Client Role so they can get in
+          const fallbackUser = { ...firebaseUser, role: "client" };
+          dispatch({ type: "SIGN_IN", payload: fallbackUser });
+        }
+      } else {
+        // No user logged in
+        dispatch({ type: "SIGN_OUT" });
+      }
+
+      // Stop the global loading spinner (for the Splash Screen)
+      if (state.isLoading) {
+        dispatch({ type: "INITIAL_CHECK_DONE" });
+      }
+    });
+
+    return unsubscribe;
   }, []);
 
-  // Handle social user creation/update
-  const handleSocialUser = async (firebaseUser, provider) => {
-    try {
-      const userRef = doc(db, "users", firebaseUser.uid);
-      const userDoc = await getDoc(userRef);
-      let userData;
+  // --- ACTIONS ---
 
-      if (!userDoc.exists()) {
-        userData = {
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-          photoURL: firebaseUser.photoURL,
-          provider: provider,
-        };
-        await setDoc(userRef, userData);
-      } else {
-        userData = userDoc.data();
+  const signUp = async (email, password, name, role, phone) => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(
+        auth,
+        email,
+        password,
+      );
+      const user = userCredential.user;
+
+      // Update Display Name
+      await updateProfile(user, { displayName: name });
+
+      // Save to Firestore
+      const userData = {
+        uid: user.uid,
+        email: user.email,
+        displayName: name,
+        role: role || "client",
+        phone: phone || "",
+        createdAt: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, "users", user.uid), userData);
+
+      // Send Verification Email (Best effort, don't block if fails)
+      try {
+        await sendEmailVerification(user);
+      } catch (e) {
+        console.log("Email verification skipped:", e.message);
       }
-      await storageService.setItem("userData", userData);
-      return userData;
+
+      return user;
     } catch (error) {
-      console.error("Error handling social user:", error);
       throw error;
     }
   };
 
-  // Social auth methods
-  const signInWithGoogle = async () => {
+  const signInWithEmail = async (email, password) => {
     try {
-      dispatch({ type: "SET_SOCIAL_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      // call the social auth service to sign in with Google
-      const firebaseUser = await socialGoogleSignIn();
-      const userData = await handleSocialUser(firebaseUser, "google");
-
-      dispatch({ type: "SIGN_IN", payload: userData });
-      return { success: true, user: userData };
+      await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code || error.message);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    } finally {
-      dispatch({ type: "SET_SOCIAL_LOADING", payload: false });
-    }
-  };
-
-  const signInWithFacebook = async () => {
-    try {
-      dispatch({ type: "SET_SOCIAL_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      // call the social auth service to sign in with Facebook
-      const firebaseUser = await socialFacebookSignIn();
-      const userData = await handleSocialUser(firebaseUser, "facebook");
-
-      dispatch({ type: "SIGN_IN", payload: userData });
-      return { success: true, user: userData };
-    } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code || error.message);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    } finally {
-      dispatch({ type: "SET_SOCIAL_LOADING", payload: false });
-    }
-  };
-
-  // --- NEW PHONE AUTH METHODS ---
-
-  const signInWithPhone = async (phoneNumber, verifier) => {
-    try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      const confirmationResult = await signInWithPhoneNumber(
-        auth,
-        phoneNumber,
-        verifier
-      );
-
-      dispatch({ type: "SET_LOADING", payload: false });
-      return confirmationResult; // Return this to the UI to hold in state
-    } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      throw new Error(errorMsg); // Throw error to be caught in UI
-    }
-  };
-
-  const confirmPhoneCode = async (confirmationResult, code) => {
-    try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      const userCredential = await confirmationResult.confirm(code);
-
-      // We have a user! Now check if they exist in Firestore
-      // We can reuse handleSocialUser for this logic
-      const userData = await handleSocialUser(userCredential.user, "phone");
-
-      dispatch({ type: "SIGN_IN", payload: userData });
-      return { success: true, user: userData };
-    } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    }
-  };
-
-  // --- END NEW PHONE AUTH METHODS ---
-
-  // Email/Password Auth
-  const signIn = async (email, password) => {
-    try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      const userCredential = await signInWithEmailAndPassword(
-        auth,
-        email,
-        password
-      );
-
-      // Try to fetch existing user data from Firestore
-      const userRef = doc(db, "users", userCredential.user.uid);
-      const userDoc = await getDoc(userRef);
-      let userData;
-
-      if (userDoc.exists()) {
-        userData = userDoc.data();
-      } else {
-        userData = {
-          uid: userCredential.user.uid,
-          email: userCredential.user.email,
-          displayName: userCredential.user.displayName || "",
-          photoURL: userCredential.user.photoURL || "",
-          provider: "password",
-        };
-        await setDoc(userRef, userData);
-      }
-
-      await storageService.setItem("userData", userData);
-      dispatch({ type: "SIGN_IN", payload: userData });
-      return { success: true, user: userData };
-    } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code || error.message);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
-    }
-  };
-
-  const signUp = async (userData) => {
-    try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      const userCredential = await createUserWithEmailAndPassword(
-        auth,
-        userData.email,
-        userData.password
-      );
-
-      // Update the user profile
-      await updateProfile(userCredential.user, {
-        displayName: userData.displayName,
-      });
-
-      // Create user document in Firestore
-      const userDoc = {
-        uid: userCredential.user.uid,
-        email: userData.email,
-        displayName: userData.displayName,
-        photoURL: "",
-        provider: "password",
-      };
-
-      await setDoc(doc(db, "users", userCredential.user.uid), userDoc);
-      await storageService.setItem("userData", userDoc);
-
-      dispatch({ type: "SIGN_UP", payload: userDoc });
-      return { success: true, user: userDoc };
-    } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
+      throw error;
     }
   };
 
   const signOut = async () => {
     try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      await auth.signOut();
-      await storageService.removeItem("userData");
+      await firebaseSignOut(auth);
       dispatch({ type: "SIGN_OUT" });
-      return { success: true };
     } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
+      console.error("Sign out error:", error);
     }
-  };
-
-  const clearError = () => {
-    // ... existing code ...
-  };
-
-  const updateUser = async (userData) => {
-    try {
-      dispatch({ type: "SET_LOADING", payload: true });
-      dispatch({ type: "CLEAR_ERROR" });
-
-      if (userData.displayName) {
-        await updateProfile(auth.currentUser, {
-          displayName: userData.displayName,
-        });
-      }
-
-      const userRef = doc(db, "users", auth.currentUser.uid);
-      await setDoc(userRef, userData, { merge: true });
-
-      dispatch({ type: "UPDATE_USER", payload: userData });
-      return { success: true };
-    } catch (error) {
-      const errorMsg = getAuthErrorMessage(error.code);
-      dispatch({ type: "AUTH_ERROR", payload: errorMsg });
-      return { success: false, error: errorMsg };
-    } finally {
-      dispatch({ type: "SET_LOADING", payload: false });
-    }
-  };
-
-  // Context value
-  const contextValue = {
-    // ... existing code ...
-    signIn,
-    signUp,
-    signOut,
-    signInWithGoogle,
-    signInWithFacebook,
-    signInWithPhone, // Add new function
-    confirmPhoneCode, // Add new function
-    clearError,
-    updateUser,
-    // ... existing code ...
   };
 
   return (
-    <AuthContext.Provider value={contextValue}>{children}</AuthContext.Provider>
+    <AuthContext.Provider
+      value={{ ...state, signUp, signInWithEmail, signOut }}
+    >
+      {children}
+    </AuthContext.Provider>
   );
 };
 
-// Helper function for error messages
-const getAuthErrorMessage = (errorCode) => {
-  switch (errorCode) {
-    case "auth/email-already-in-use":
-    // ... existing code ...
-    case "auth/network-request-failed":
-      return "Network error. Please check your internet connection.";
-    // --- ADD PHONE AUTH ERRORS ---
-    case "auth/invalid-phone-number":
-      return "The phone number is not valid.";
-    case "auth/missing-phone-number":
-      return "Please enter a phone number.";
-    case "auth/quota-exceeded":
-      return "SMS quota exceeded. Please try again later.";
-    case "auth/user-disabled":
-      return "This account has been disabled.";
-    case "auth/invalid-verification-code":
-      return "The OTP code is incorrect. Please try again.";
-    case "auth/code-expired":
-      return "The OTP code has expired. Please request a new one.";
-    // --- END PHONE AUTH ERRORS ---
-    default:
-      return "An unexpected error occurred. Please try again.";
-  }
-};
-
-// Custom hook to use the auth context
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error("useAuth must be used within an AuthProvider");
-  }
-  return context;
-};
+// 5. Custom Hook for easy access
+export const useAuth = () => useContext(AuthContext);

@@ -1,387 +1,197 @@
-// src/screens/client/ClientHomeScreen.js
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   View,
-  TouchableOpacity,
   ScrollView,
+  StyleSheet,
+  TouchableOpacity,
+  FlatList,
   Image,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { globalStyles } from "../../styles/GlobalStyles";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { useAuth } from "../../context/AuthContext";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+} from "firebase/firestore";
+import { db } from "../../config/firebase";
 import { CustomText } from "../../components/CustomText";
-import { SafeAreaView } from 'react-native-safe-area-context';
-
+import { colors, spacing, shadows } from "../../components/theme";
+import Icon from "../../components/Icon";
 
 const ClientHomeScreen = ({ navigation }) => {
-  const [activeCategory, setActiveCategory] = useState("all");
+  const { user } = useAuth();
+  const [myErrands, setMyErrands] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const categories = [
-    { id: "all", name: "All", icon: "grid" },
-    { id: "cleaning", name: "Cleaning", icon: "home" },
-    { id: "repairs", name: "Repairs", icon: "construct" },
-    { id: "shopping", name: "Shopping", icon: "cart" },
-    { id: "delivery", name: "Delivery", icon: "bicycle" },
-  ];
+  // Fetch errands posted by THIS client
+  useEffect(() => {
+    if (!user) return;
 
-  const featuredTaskers = [
-    {
-      id: 1,
-      name: "Belinah Mayowa",
-      rating: 4.9,
-      tasks: 124,
-      category: "Cleaning",
-      image:
-        "https://images.unsplash.com/photo-1494790108377-be9c29b29330?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-    },
-    {
-      id: 2,
-      name: "Jide Godwin",
-      rating: 4.8,
-      tasks: 89,
-      category: "Repairs",
-      image:
-        "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-    },
-    {
-      id: 3,
-      name: "Elianah Mayokun",
-      rating: 4.7,
-      tasks: 67,
-      category: "Shopping",
-      image:
-        "https://images.unsplash.com/photo-1534528741775-53994a69daeb?ixlib=rb-1.2.1&auto=format&fit=crop&w=200&q=80",
-    },
-  ];
+    const q = query(
+      collection(db, "tasks"),
+      where("clientId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+    );
 
-  const recentTasks = [
-    {
-      id: 1,
-      title: "House Cleaning",
-      status: "completed",
-      date: "2 hours ago",
-      price: "$50",
-      tasker: "Sarah Johnson",
-    },
-    {
-      id: 2,
-      title: "Grocery Shopping",
-      status: "in-progress",
-      date: "Yesterday",
-      price: "$30",
-      tasker: "Emily Davis",
-    },
-    {
-      id: 3,
-      title: "Furniture Assembly",
-      status: "pending",
-      date: "Oct 15",
-      price: "$80",
-      tasker: "Mike Chen",
-    },
-  ];
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setMyErrands(tasks);
+      setLoading(false);
+    });
 
-  const getStatusColor = (status) => {
-    switch (status) {
-      case "completed":
-        return "#10b981";
-      case "in-progress":
-        return "#6366f1";
-      case "pending":
-        return "#f59e0b";
-      default:
-        return "#6b7280";
-    }
-  };
+    return () => unsubscribe();
+  }, [user]);
+
+  const renderErrandItem = ({ item }) => (
+    <TouchableOpacity
+      style={[styles.taskCard, shadows.small]}
+      onPress={() => navigation.navigate("JobDetails", { job: item })}
+    >
+      <View style={styles.cardHeader}>
+        <View style={styles.iconContainer}>
+          <Icon name="cube-outline" size={20} color={colors.primary} />
+        </View>
+        <View style={{ flex: 1, marginLeft: 10 }}>
+          <CustomText type="h4" numberOfLines={1}>
+            {item.title}
+          </CustomText>
+          <CustomText type="caption" color="gray500">
+            {item.status}
+          </CustomText>
+        </View>
+        <CustomText type="h4" color="primary">
+          ₦{item.budget}
+        </CustomText>
+      </View>
+    </TouchableOpacity>
+  );
 
   return (
-    <SafeAreaView style={globalStyles.container}>
-      <View style={{ flex: 1 }}>
+    <SafeAreaView style={styles.container}>
+      <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
         {/* Header */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            paddingHorizontal: 16,
-            paddingVertical: 50,
-            backgroundColor: "#000000",
-          }}
-        >
+        <View style={styles.header}>
           <View>
-            <CustomText type="caption" color="gray300">
-              Welcome back
+            <CustomText type="h2" color="primary">
+              Hello, {user?.displayName?.split(" ")[0]}
             </CustomText>
-            <CustomText type="h3" color="white">
-              Folakemi Abiodun
-            </CustomText>
+            <CustomText color="gray500">What do you need help with?</CustomText>
           </View>
-          <TouchableOpacity
-            onPress={() => navigation.navigate("Notifications")}
-          >
-            <Ionicons name="notifications-outline" size={24} color="#FFFFFF" />
+          <TouchableOpacity onPress={() => navigation.navigate("Profile")}>
+            <Image
+              source={{
+                uri: `https://ui-avatars.com/api/?name=${user?.displayName}&background=0D9488&color=fff`,
+              }}
+              style={styles.avatar}
+            />
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-          {/* Quick Actions */}
-          <View style={{ marginBottom: 24 }}>
-            <CustomText
-              type="heading"
-              style={{ marginBottom: 16, color: "#000000" }}
-            >
-              Get something done
-            </CustomText>
-            <TouchableOpacity
-              style={[
-                globalStyles.button,
-                {
-                  flexDirection: "row",
-                  alignItems: "center",
-                  justifyContent: "center",
-                },
-              ]}
-              onPress={() => navigation.navigate("Post")}
-            >
-              <Ionicons
-                name="add-circle"
-                size={20}
-                color="#FFFFFF"
-                style={{ marginRight: 8 }}
-              />
-              <CustomText style={globalStyles.buttonText}>
+        {/* Big CTA Button */}
+        <TouchableOpacity
+          style={[styles.ctaButton, shadows.medium]}
+          onPress={() => navigation.navigate("Post")}
+        >
+          <View style={styles.ctaContent}>
+            <View style={styles.plusIcon}>
+              <Icon name="add" size={30} color="white" />
+            </View>
+            <View>
+              <CustomText type="h3" color="white">
                 Post a New Errand
               </CustomText>
-            </TouchableOpacity>
+              <CustomText color="white" style={{ opacity: 0.9 }}>
+                Get help quickly
+              </CustomText>
+            </View>
           </View>
+        </TouchableOpacity>
 
-          {/* Categories */}
-          <View style={{ marginBottom: 24 }}>
-            <CustomText
-              type="heading"
-              style={{ marginBottom: 16, color: "#000000" }}
-            >
-              Categories
+        {/* My Recent Activity */}
+        <View style={styles.sectionHeader}>
+          <CustomText type="h3">Recent Activity</CustomText>
+          <TouchableOpacity onPress={() => navigation.navigate("MyErrands")}>
+            <CustomText color="primary">View All</CustomText>
+          </TouchableOpacity>
+        </View>
+
+        {loading ? (
+          <CustomText style={{ padding: 20 }}>
+            Loading your errands...
+          </CustomText>
+        ) : myErrands.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Icon name="clipboard-outline" size={40} color={colors.gray300} />
+            <CustomText color="gray400" style={{ marginTop: 10 }}>
+              You haven't posted any errands yet.
             </CustomText>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={{ marginBottom: 16 }}
-            >
-              {categories.map((category) => (
-                <TouchableOpacity
-                  key={category.id}
-                  style={{
-                    backgroundColor:
-                      activeCategory === category.id ? "black" : "#000000",
-                    padding: 12,
-                    borderRadius: 12,
-                    marginRight: 8,
-                    alignItems: "center",
-                    minWidth: 80,
-                  }}
-                  onPress={() => setActiveCategory(category.id)}
-                >
-                  <Ionicons name={category.icon} size={20} color="#FFFFFF" />
-                  <CustomText
-                    type="caption"
-                    style={{ marginTop: 4, color: "#FFFFFF" }}
-                  >
-                    {category.name}
-                  </CustomText>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
           </View>
-
-          {/* Featured Taskers */}
-          <View style={{ marginBottom: 24 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 16,
-              }}
-            >
-              <CustomText type="heading" style={{ color: "#000000" }}>
-                Featured Taskers
-              </CustomText>
-              <TouchableOpacity>
-                <CustomText type="caption" style={{ color: "teal" }}>
-                  View All
-                </CustomText>
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-              {featuredTaskers.map((tasker) => (
-                <TouchableOpacity
-                  key={tasker.id}
-                  style={[
-                    globalStyles.card,
-                    { width: 160, marginRight: 12, backgroundColor: "#000000" },
-                  ]}
-                  onPress={() => navigation.navigate("JobDetails", { tasker })}
-                >
-                  <Image
-                    source={{ uri: tasker.image }}
-                    style={{
-                      width: 60,
-                      height: 60,
-                      borderRadius: 30,
-                      marginBottom: 12,
-                      alignSelf: "center",
-                    }}
-                  />
-                  <CustomText
-                    type="heading"
-                    style={{
-                      textAlign: "center",
-                      marginBottom: 4,
-                      color: "#FFFFFF",
-                    }}
-                  >
-                    {tasker.name}
-                  </CustomText>
-                  <CustomText
-                    type="caption"
-                    style={{
-                      textAlign: "center",
-                      marginBottom: 8,
-                      color: "teal",
-                    }}
-                  >
-                    {tasker.category}
-                  </CustomText>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      justifyContent: "center",
-                      alignItems: "center",
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Ionicons name="star" size={14} color="#f59e0b" />
-                    <CustomText
-                      type="caption"
-                      style={{ marginLeft: 4, color: "#FFFFFF" }}
-                    >
-                      {tasker.rating} • {tasker.tasks} tasks
-                    </CustomText>
-                  </View>
-                  <TouchableOpacity
-                    style={{
-                      backgroundColor: "teal",
-                      padding: 8,
-                      borderRadius: 8,
-                    }}
-                  >
-                    <CustomText
-                      style={{
-                        color: "#FFFFFF",
-                        textAlign: "center",
-                        fontSize: 12,
-                      }}
-                    >
-                      Hire Now
-                    </CustomText>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
-          </View>
-
-          {/* Recent Tasks */}
-          <View>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                alignItems: "center",
-                marginBottom: 16,
-              }}
-            >
-              <CustomText type="heading" style={{ color: "#000000" }}>
-                Recent Tasks
-              </CustomText>
-              <TouchableOpacity
-                onPress={() => navigation.navigate("MyErrands")}
-              >
-                <CustomText type="caption" style={{ color: "teal" }}>
-                  View All
-                </CustomText>
-              </TouchableOpacity>
-            </View>
-
-            {recentTasks.map((task) => (
-              <TouchableOpacity
-                key={task.id}
-                style={[
-                  globalStyles.card,
-                  { marginBottom: 12, backgroundColor: "#000000" },
-                ]}
-                onPress={() => navigation.navigate("JobDetails", { task })}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    marginBottom: 8,
-                  }}
-                >
-                  <CustomText
-                    type="body"
-                    style={{ fontWeight: "600", color: "#FFFFFF" }}
-                  >
-                    {task.title}
-                  </CustomText>
-                  <View
-                    style={{
-                      backgroundColor: getStatusColor(task.status),
-                      paddingHorizontal: 8,
-                      paddingVertical: 4,
-                      borderRadius: 12,
-                    }}
-                  >
-                    <CustomText
-                      type="caption"
-                      style={{ color: "#FFFFFF", textTransform: "capitalize" }}
-                    >
-                      {task.status}
-                    </CustomText>
-                  </View>
-                </View>
-                <CustomText
-                  type="caption"
-                  style={{ marginBottom: 8, color: "#FFFFFF" }}
-                >
-                  With {task.tasker}
-                </CustomText>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                  }}
-                >
-                  <CustomText type="caption" style={{ color: "#A9A9A9" }}>
-                    {task.date}
-                  </CustomText>
-                  <CustomText
-                    type="body"
-                    style={{ color: "teal", fontWeight: "600" }}
-                  >
-                    {task.price}
-                  </CustomText>
-                </View>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </ScrollView>
-      </View>
+        ) : (
+          <FlatList
+            data={myErrands.slice(0, 3)} // Show only top 3
+            renderItem={renderErrandItem}
+            keyExtractor={(item) => item.id}
+            scrollEnabled={false}
+          />
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.gray50, padding: spacing.md },
+  header: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.lg,
+  },
+  avatar: { width: 40, height: 40, borderRadius: 20 },
+
+  ctaButton: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
+    padding: spacing.lg,
+    marginBottom: spacing.xl,
+  },
+  ctaContent: { flexDirection: "row", alignItems: "center" },
+  plusIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "rgba(255,255,255,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: spacing.md,
+  },
+
+  sectionHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: spacing.md,
+  },
+
+  taskCard: {
+    backgroundColor: colors.white,
+    padding: spacing.md,
+    borderRadius: 12,
+    marginBottom: spacing.sm,
+  },
+  cardHeader: { flexDirection: "row", alignItems: "center" },
+  iconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    backgroundColor: colors.gray50,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  emptyState: { alignItems: "center", padding: 40 },
+});
 
 export default ClientHomeScreen;

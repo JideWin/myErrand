@@ -1,10 +1,10 @@
-// src/config/firebase.js
+// scr/config/firebase.js
 import { initializeApp } from "firebase/app";
 import { initializeAuth, getReactNativePersistence } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+import ReactNativeAsyncStorage from "@react-native-async-storage/async-storage";
 
-// Your Firebase configuration
+// Firebase configuration
 const firebaseConfig = {
   apiKey: "AIzaSyBPLHUTpOB08sWXiHjHSOEJxmJRysezZS8",
   authDomain: "myerrandapp-c66f0.firebaseapp.com",
@@ -19,7 +19,7 @@ const app = initializeApp(firebaseConfig);
 
 // Initialize Firebase Authentication with persistence
 export const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(ReactNativeAsyncStorage)
+  persistence: getReactNativePersistence(ReactNativeAsyncStorage),
 });
 
 // Initialize Cloud Firestore

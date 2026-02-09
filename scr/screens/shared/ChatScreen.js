@@ -1,232 +1,243 @@
-// src/screens/shared/ChatScreen.js
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   View,
-  TouchableOpacity,
   TextInput,
   FlatList,
-  SafeAreaView,
-  Image,
+  StyleSheet,
+  KeyboardAvoidingView,
+  Platform,
+  TouchableOpacity,
+  ActivityIndicator,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { globalStyles } from "../../styles/GlobalStyles";
-import { CustomText } from "../../components/CustomText";
-import { useAuth } from "../../context/AuthContext"; // Import useAuth
+import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  listenToMessages,
-  sendMessage,
-} from "../../services/firebaseChatService"; // Import chat service
-import { serverTimestamp } from "firebase/firestore";
+  collection,
+  addDoc,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { useAuth } from "../../context/AuthContext";
+import { CustomText } from "../../components/CustomText";
+import { colors, spacing, shadows } from "../../components/theme";
+import Icon from "../../components/Icon";
 
-const ChatScreen = ({ navigation, route }) => {
-  // Get the current user from AuthContext
-  const { user: currentUser } = useAuth();
+const ChatScreen = ({ route, navigation }) => {
+  const { user } = useAuth();
+  const params = route.params || {};
 
-  // Get navigation params. We now require otherUser and taskId.
-  const { otherUser, taskId } = route.params;
+  // FIX: Handle whatever name the previous screen used (chatId, jobId, or taskId)
+  const currentJobId = params.chatId || params.jobId || params.taskId;
 
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState("");
+  const [inputText, setInputText] = useState("");
+  const [loading, setLoading] = useState(true);
+  const flatListRef = useRef();
 
-  // Set up the real-time message listener
   useEffect(() => {
-    if (!taskId) {
-      console.error("No taskId provided to ChatScreen");
+    if (!currentJobId) {
+      console.error("Chat Error: No Job ID provided");
+      setLoading(false);
       return;
     }
 
-    // listenToMessages returns the unsubscribe function
-    const unsubscribe = listenToMessages(taskId, (newMessages) => {
-      // Format messages for the FlatList, handling null timestamps
-      const formattedMessages = newMessages.map((msg) => ({
-        ...msg,
-        time: msg.createdAt
-          ? new Date(msg.createdAt.seconds * 1000).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "Sending...",
+    // Query messages for THIS specific job
+    const q = query(
+      collection(db, "chats"),
+      where("taskId", "==", currentJobId),
+      orderBy("createdAt", "asc"),
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
       }));
-      setMessages(formattedMessages);
+      setMessages(msgs);
+      setLoading(false);
+
+      // Scroll to bottom on new message
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 100);
     });
 
-    // Clean up the listener when the component unmounts
     return () => unsubscribe();
-  }, [taskId]); // Re-run effect if taskId changes
+  }, [currentJobId]);
 
-  const handleSendMessage = async () => {
-    if (newMessage.trim() && currentUser && taskId) {
-      const messageData = {
-        text: newMessage,
-        senderId: currentUser.uid,
-        senderName:
-          currentUser.displayName ||
-          `${currentUser.firstName} ${currentUser.lastName}`,
-        senderPhoto: currentUser.photoURL || null,
-        // createdAt is added by the service using serverTimestamp
-      };
+  const handleSend = async () => {
+    if (inputText.trim() === "") return;
 
-      try {
-        setNewMessage(""); // Clear input immediately
-        await sendMessage(taskId, messageData);
-      } catch (error) {
-        console.error("Failed to send message:", error);
-        // Optionally, re-set the new message text to allow user to try again
-        setNewMessage(newMessage);
-      }
+    const textToSend = inputText.trim();
+    setInputText(""); // Clear input immediately for better UX
+
+    try {
+      // FIX: Ensure 'taskId' is explicitly defined here
+      await addDoc(collection(db, "chats"), {
+        taskId: currentJobId,
+        text: textToSend,
+        senderId: user.uid,
+        senderName: user.displayName || "User",
+        createdAt: serverTimestamp(),
+        // Optional: Add read status
+        readBy: [user.uid],
+      });
+    } catch (error) {
+      console.error("Send error:", error);
+      alert("Failed to send message: " + error.message);
     }
   };
 
   const renderMessage = ({ item }) => {
-    // Check if the message was sent by the current user
-    const isMyMessage = item.senderId === currentUser.uid;
-
+    const isMe = item.senderId === user.uid;
     return (
       <View
         style={[
-          {
-            maxWidth: "80%",
-            padding: 12,
-            borderRadius: 18,
-            marginBottom: 12,
-            alignSelf: isMyMessage ? "flex-end" : "flex-start",
-          },
-          isMyMessage
-            ? { backgroundColor: "#6366f1", borderBottomRightRadius: 4 } // My message
-            : { backgroundColor: "#f3f4f6", borderBottomLeftRadius: 4 }, // Other user's message
+          styles.messageBubble,
+          isMe ? styles.myMessage : styles.theirMessage,
         ]}
       >
-        <CustomText
-          style={{
-            color: isMyMessage ? "#ffffff" : "#374151",
-            marginBottom: 4,
-          }}
-        >
-          {item.text}
-        </CustomText>
-        <CustomText
-          style={{
-            fontSize: 12,
-            color: isMyMessage ? "#e0e7ff" : "#9ca3af",
-            textAlign: "right",
-          }}
-        >
-          {item.time}
-        </CustomText>
+        {!isMe && (
+          <CustomText
+            type="caption"
+            color="gray500"
+            style={{ marginBottom: 2 }}
+          >
+            {item.senderName}
+          </CustomText>
+        )}
+        <CustomText color={isMe ? "white" : "gray800"}>{item.text}</CustomText>
       </View>
     );
   };
 
   return (
-    <SafeAreaView style={globalStyles.container}>
-      <View style={{ flex: 1 }}>
-        {/* Header - Now uses otherUser prop */}
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "space-between",
-            alignItems: "center",
-            padding: 16,
-            backgroundColor: "#f8fafc",
-          }}
+    <SafeAreaView style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          style={{ padding: 5 }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center" }}>
-            <TouchableOpacity onPress={() => navigation.goBack()}>
-              <Ionicons
-                name="arrow-back"
-                size={24}
-                color="#374151"
-                style={{ marginRight: 12 }}
-              />
-            </TouchableOpacity>
-            {otherUser?.image ? (
-              <Image
-                source={{ uri: otherUser.image }}
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  marginRight: 12,
-                }}
-              />
-            ) : (
-              <View
-                style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 20,
-                  marginRight: 12,
-                  backgroundColor: "#e5e7eb",
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <Ionicons name="person" size={24} color="#9ca3af" />
-              </View>
-            )}
-            <View>
-              <CustomText type="body" style={{ fontWeight: "600" }}>
-                {otherUser?.name || "Errand User"}
-              </CustomText>
-              {/* 'online' status can be a future feature from Firestore presence */}
-            </View>
-          </View>
-          <TouchableOpacity>
-            <Ionicons name="call-outline" size={24} color="#6366f1" />
-          </TouchableOpacity>
+          <Icon name="arrow-back" size={24} color={colors.gray800} />
+        </TouchableOpacity>
+        <View style={{ marginLeft: 10 }}>
+          <CustomText type="h3">Chat</CustomText>
+          <CustomText type="caption" color="gray500">
+            Job ID: {currentJobId ? currentJobId.slice(0, 6) : "..."}
+          </CustomText>
         </View>
+      </View>
 
-        {/* Messages */}
+      {/* Messages List */}
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
         <FlatList
+          ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={(item) => item.id}
-          style={{ flex: 1, padding: 16 }}
-          contentContainerStyle={{ paddingBottom: 16 }}
-          inverted={false} // Keep as false if using `flex-end` or similar, or set to true for typical chat
+          contentContainerStyle={{ padding: spacing.md, paddingBottom: 20 }}
+          onContentSizeChange={() =>
+            flatListRef.current?.scrollToEnd({ animated: true })
+          }
         />
+      )}
 
-        {/* Message Input */}
-        <View
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            padding: 16,
-            borderTopWidth: 1,
-            borderTopColor: "#e5e7eb",
-          }}
-        >
+      {/* Input Area */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? 10 : 0}
+      >
+        <View style={styles.inputContainer}>
           <TextInput
-            style={[
-              globalStyles.input,
-              {
-                flex: 1,
-                marginRight: 12,
-                marginBottom: 0,
-                backgroundColor: "#f9fafb",
-              },
-            ]}
+            style={styles.input}
+            value={inputText}
+            onChangeText={setInputText}
             placeholder="Type a message..."
-            placeholderTextColor="#9ca3af"
-            value={newMessage}
-            onChangeText={setNewMessage}
+            placeholderTextColor={colors.gray400}
+            multiline
           />
           <TouchableOpacity
-            style={{
-              backgroundColor: "#6366f1",
-              padding: 12,
-              borderRadius: 12,
-              opacity: newMessage.trim() ? 1 : 0.5,
-            }}
-            onPress={handleSendMessage}
-            disabled={!newMessage.trim()}
+            style={[
+              styles.sendBtn,
+              !inputText.trim() && { backgroundColor: colors.gray300 },
+            ]}
+            onPress={handleSend}
+            disabled={!inputText.trim()}
           >
-            <Ionicons name="send" size={20} color="#ffffff" />
+            <Icon name="send" size={20} color="white" />
           </TouchableOpacity>
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.gray50 },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.md,
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderColor: colors.gray200,
+    ...shadows.small,
+  },
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+
+  messageBubble: {
+    padding: 12,
+    borderRadius: 16,
+    marginBottom: 8,
+    maxWidth: "80%",
+  },
+  myMessage: {
+    backgroundColor: colors.primary,
+    alignSelf: "flex-end",
+    borderBottomRightRadius: 2,
+  },
+  theirMessage: {
+    backgroundColor: colors.white,
+    alignSelf: "flex-start",
+    borderBottomLeftRadius: 2,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+
+  inputContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.md,
+    backgroundColor: colors.white,
+    borderTopWidth: 1,
+    borderColor: colors.gray200,
+  },
+  input: {
+    flex: 1,
+    backgroundColor: colors.gray50,
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    fontSize: 16,
+    maxHeight: 100,
+  },
+  sendBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: colors.primary,
+    justifyContent: "center",
+    alignItems: "center",
+    marginLeft: 10,
+  },
+});
 
 export default ChatScreen;

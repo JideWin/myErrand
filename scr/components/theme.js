@@ -1,5 +1,6 @@
 // scr/components/theme.js
 
+// Named export for colors
 export const colors = {
   primary: "#008080", // Teal
   primaryDark: "#006666",

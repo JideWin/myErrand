@@ -10,12 +10,12 @@ const AvailableJobsScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Define variable HERE in the main scope
+    // 1. Define 'unsubscribe' here so it's available for cleanup
     let unsubscribe;
 
     const startListener = () => {
       try {
-        // 2. Assign the listener to the variable
+        // 2. Assign the listener
         unsubscribe = firebaseTaskService.listenToAvailableTasks((data) => {
           setTasks(data);
           setLoading(false);
@@ -28,7 +28,7 @@ const AvailableJobsScreen = ({ navigation }) => {
 
     startListener();
 
-    // 3. Cleanup is safe because 'unsubscribe' is in scope
+    // 3. Safe Cleanup
     return () => {
       if (unsubscribe) {
         unsubscribe();
@@ -40,6 +40,7 @@ const AvailableJobsScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <CustomText type="h2">Available Errands</CustomText>
+        <CustomText color="gray500">Find work near you</CustomText>
       </View>
 
       {loading ? (
@@ -62,13 +63,13 @@ const AvailableJobsScreen = ({ navigation }) => {
             />
           )}
           ListEmptyComponent={
-            <CustomText
-              align="center"
-              style={{ marginTop: 50, color: colors.gray500 }}
-            >
-              No errands available right now.
-            </CustomText>
+            <View style={styles.emptyState}>
+              <CustomText align="center" color="gray500">
+                No errands available right now.
+              </CustomText>
+            </View>
           }
+          contentContainerStyle={{ paddingBottom: 20 }}
         />
       )}
     </View>
@@ -77,7 +78,8 @@ const AvailableJobsScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
-  header: { padding: 20, backgroundColor: colors.white },
+  header: { padding: 20, backgroundColor: colors.white, marginBottom: 10 },
+  emptyState: { marginTop: 50, padding: 20 },
 });
 
 export default AvailableJobsScreen;

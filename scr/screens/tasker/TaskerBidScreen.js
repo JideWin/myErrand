@@ -1,168 +1,191 @@
-// src/screens/tasker/TaskerBidScreen.js
 import React, { useState } from "react";
 import {
   View,
-  TouchableOpacity,
   TextInput,
-  ScrollView,
-  SafeAreaView,
-  ActivityIndicator,
+  StyleSheet,
   Alert,
+  ScrollView,
+  KeyboardAvoidingView,
+  Platform,
 } from "react-native";
-import { Ionicons } from "@expo/vector-icons";
-import { globalStyles } from "../../styles/GlobalStyles";
-import { CustomText } from "../../components/CustomText";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { useAuth } from "../../context/AuthContext";
-import { firebaseTaskService } from "../../services/firebaseTaskService";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+  doc,
+  updateDoc,
+  increment,
+} from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { CustomText } from "../../components/CustomText";
+import { colors, spacing } from "../../components/theme";
+import Button from "../../components/Button";
+import Icon from "../../components/Icon";
 
 const TaskerBidScreen = ({ navigation, route }) => {
-  // Get job details passed from previous screen
-  const { job } = route.params;
+  const { job } = route.params || {};
   const { user } = useAuth();
 
-  const [bidAmount, setBidAmount] = useState("");
-  const [message, setMessage] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
+  // Default bid to the job budget
+  const [bidAmount, setBidAmount] = useState(
+    job?.budget ? String(job.budget) : "",
+  );
+  const [proposal, setProposal] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const handleSubmitBid = async () => {
-    if (!bidAmount) {
-      Alert.alert("Missing Information", "Please enter your bid amount.");
+  const handlePlaceBid = async () => {
+    if (!bidAmount || !proposal) {
+      Alert.alert(
+        "Missing Info",
+        "Please enter your price and a short proposal.",
+      );
       return;
     }
-    if (!user) {
-      Alert.alert("Error", "You must be logged in to place a bid.");
-      return;
-    }
 
-    setIsLoading(true);
+    setLoading(true);
+
     try {
-      // Prepare the bid data
-      const bidData = {
+      // 1. Create the Bid
+      await addDoc(collection(db, "bids"), {
         taskId: job.id,
         taskerId: user.uid,
-        taskerName: user.displayName || `${user.firstName} ${user.lastName}`,
-        taskerPhoto: user.photoURL || null,
-        bidAmount: bidAmount, // You might want to format this (e.g., ensure it's a number string)
-        message: message,
-      };
+        taskerName: user.displayName || "Tasker",
+        amount: parseFloat(bidAmount),
+        proposal: proposal,
+        status: "Pending",
+        createdAt: serverTimestamp(),
+        clientEmail: job.clientEmail || "",
+      });
 
-      // Call the service to create the bid in Firestore
-      await firebaseTaskService.createBid(bidData);
+      // 2. Update the Job (Increment bid count)
+      const jobRef = doc(db, "tasks", job.id);
+      await updateDoc(jobRef, {
+        bidsCount: increment(1),
+      });
 
-      setIsLoading(false);
-      Alert.alert("Bid Placed!", "The client has been notified of your bid.", [
-        { text: "OK", onPress: () => navigation.goBack() },
+      // 3. SEND NOTIFICATION TO CLIENT
+      // This alerts the client that someone wants the job
+      if (job.clientId) {
+        await addDoc(collection(db, "notifications"), {
+          userId: job.clientId, // The Client's ID
+          title: "New Bid Received!",
+          body: `${user.displayName || "A Tasker"} placed a bid of ₦${bidAmount} on "${job.title}"`,
+          type: "BID_RECEIVED",
+          relatedId: job.id,
+          read: false,
+          createdAt: serverTimestamp(),
+        });
+      }
+
+      Alert.alert("Success", "Bid placed successfully!", [
+        {
+          text: "OK",
+          onPress: () => navigation.navigate("TaskerMain", { screen: "Jobs" }),
+        },
       ]);
     } catch (error) {
-      setIsLoading(false);
-      console.error("Error placing bid:", error);
-      Alert.alert("Error", "Could not place your bid. Please try again.");
+      console.error("Bid Error:", error);
+      Alert.alert("Error", "Could not place bid. Check your connection.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <SafeAreaView style={globalStyles.container}>
-      {/* Header */}
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          padding: 16,
-          backgroundColor: "#f8fafc",
-          borderBottomWidth: 1,
-          borderBottomColor: "#e5e7eb",
-        }}
+    <SafeAreaView style={styles.container}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        style={{ flex: 1 }}
       >
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Ionicons name="arrow-back" size={24} color="#374151" />
-        </TouchableOpacity>
-        <CustomText type="h4" style={{ marginLeft: 16 }}>
-          Place Your Bid
-        </CustomText>
-      </View>
+        <ScrollView contentContainerStyle={styles.scroll}>
+          <View style={styles.header}>
+            <CustomText type="h2" color="primary">
+              Place a Bid
+            </CustomText>
+            <CustomText color="gray500">For: {job?.title}</CustomText>
+          </View>
 
-      <ScrollView style={{ flex: 1, padding: 16 }}>
-        {/* Job Summary Card */}
-        <View style={[globalStyles.card, { marginBottom: 24 }]}>
-          <CustomText type="heading" style={{ marginBottom: 4 }}>
-            {job.title}
-          </CustomText>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              marginTop: 8,
-            }}
-          >
-            <View>
-              <CustomText type="caption">Client's Budget</CustomText>
-              <CustomText
-                type="body"
-                style={{ color: "#008080", fontWeight: "600" }}
-              >
-                {job.budget || job.price}
+          <View style={styles.infoCard}>
+            <Icon name="cash-outline" size={24} color={colors.primary} />
+            <View style={{ marginLeft: 15 }}>
+              <CustomText type="caption" color="gray500">
+                CLIENT'S BUDGET
               </CustomText>
-            </View>
-            <View>
-              <CustomText type="caption">Urgency</CustomText>
-              <CustomText type="body" style={{ textTransform: "capitalize" }}>
-                {job.urgency || "Normal"}
-              </CustomText>
+              <CustomText type="h3">₦{job?.budget}</CustomText>
             </View>
           </View>
-        </View>
 
-        {/* Bid Amount Input */}
-        <View style={{ marginBottom: 24 }}>
-          <CustomText style={globalStyles.inputLabel}>
-            Your Bid Amount (NGN)
-          </CustomText>
-          <TextInput
-            style={globalStyles.input}
-            placeholder="e.g., 5000"
-            placeholderTextColor="#9CA3AF"
-            value={bidAmount}
-            onChangeText={setBidAmount}
-            keyboardType="numeric"
+          <View style={styles.form}>
+            <CustomText style={styles.label}>Your Price (₦)</CustomText>
+            <TextInput
+              style={styles.input}
+              value={bidAmount}
+              onChangeText={setBidAmount}
+              keyboardType="numeric"
+              placeholder="e.g. 5000"
+            />
+
+            <CustomText style={styles.label}>
+              Why should they hire you?
+            </CustomText>
+            <TextInput
+              style={[styles.input, styles.textArea]}
+              value={proposal}
+              onChangeText={setProposal}
+              multiline
+              numberOfLines={4}
+              placeholder="I have 5 years experience and can start immediately..."
+              textAlignVertical="top"
+            />
+          </View>
+
+          <Button
+            title="Submit Bid"
+            onPress={handlePlaceBid}
+            loading={loading}
+            style={{ marginTop: spacing.xl }}
           />
-          <CustomText type="caption" style={{ marginTop: 4, color: "#6B7280" }}>
-            Enter the amount you are willing to complete this task for.
-          </CustomText>
-        </View>
 
-        {/* Message Input */}
-        <View style={{ marginBottom: 24 }}>
-          <CustomText style={globalStyles.inputLabel}>
-            Message to Client (Optional)
-          </CustomText>
-          <TextInput
-            style={[
-              globalStyles.input,
-              { height: 120, textAlignVertical: "top" },
-            ]}
-            placeholder="Introduce yourself, explain why you are the best fit, or ask a question..."
-            placeholderTextColor="#9CA3AF"
-            value={message}
-            onChangeText={setMessage}
-            multiline
+          <Button
+            title="Cancel"
+            type="outline"
+            onPress={() => navigation.goBack()}
+            style={{ marginTop: spacing.md, borderColor: colors.gray300 }}
+            textStyle={{ color: colors.gray500 }}
           />
-        </View>
-
-        {/* Submit Button */}
-        <TouchableOpacity
-          style={globalStyles.button}
-          onPress={handleSubmitBid}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <CustomText style={globalStyles.buttonText}>Submit Bid</CustomText>
-          )}
-        </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
+
+const styles = StyleSheet.create({
+  container: { flex: 1, backgroundColor: colors.white },
+  scroll: { padding: spacing.lg },
+  header: { marginBottom: spacing.xl },
+  infoCard: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.gray50,
+    padding: spacing.md,
+    borderRadius: 12,
+    marginBottom: spacing.xl,
+    borderWidth: 1,
+    borderColor: colors.gray200,
+  },
+  form: { gap: spacing.md },
+  label: { fontWeight: "600", color: colors.gray700, marginBottom: 5 },
+  input: {
+    borderWidth: 1,
+    borderColor: colors.gray300,
+    borderRadius: 8,
+    padding: spacing.md,
+    fontSize: 16,
+    backgroundColor: colors.white,
+  },
+  textArea: { height: 100 },
+});
 
 export default TaskerBidScreen;

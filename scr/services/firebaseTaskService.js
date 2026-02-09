@@ -1,4 +1,4 @@
-// src/services/firebaseTaskService.js
+// scr/services/firebaseTaskService.js
 import {
   collection,
   addDoc,
@@ -17,174 +17,124 @@ import {
 import { db } from "../config/firebase";
 
 export const firebaseTaskService = {
-  // --- EXISTING TASK FUNCTIONS ---
-
+  // Create a new task
   createTask: async (taskData) => {
     try {
-      const taskRef = await addDoc(collection(db, "tasks"), {
+      const docRef = await addDoc(collection(db, "tasks"), {
         ...taskData,
         createdAt: serverTimestamp(),
-        status: "pending",
-        assignedTo: null,
-        completedAt: null,
-        bidsCount: 0, // Track number of bids
       });
-      return { id: taskRef.id, ...taskData };
+      return docRef.id;
     } catch (error) {
-      throw error.message;
-    }
-  },
-
-  getClientTasks: async (userId, status = "") => {
-    try {
-      let q;
-      if (status) {
-        q = query(
-          collection(db, "tasks"),
-          where("clientId", "==", userId),
-          where("status", "==", status),
-          orderBy("createdAt", "desc"),
-        );
-      } else {
-        q = query(
-          collection(db, "tasks"),
-          where("clientId", "==", userId),
-          orderBy("createdAt", "desc"),
-        );
-      }
-      const querySnapshot = await getDocs(q);
-      return querySnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-    } catch (error) {
-      throw error.message;
-    }
-  },
-
-  listenToClientTasks: (userId, callback) => {
-    const q = query(
-      collection(db, "tasks"),
-      where("clientId", "==", userId),
-      orderBy("createdAt", "desc"),
-    );
-    return onSnapshot(q, (snapshot) => {
-      const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      callback(tasks);
-    });
-  },
-
-  listenToAvailableTasks: (callback) => {
-    const q = query(
-      collection(db, "tasks"),
-      where("status", "==", "pending"),
-      orderBy("createdAt", "desc"),
-    );
-    return onSnapshot(q, (snapshot) => {
-      const tasks = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      callback(tasks);
-    });
-  },
-
-  updateTaskStatus: async (taskId, status) => {
-    try {
-      const taskRef = doc(db, "tasks", taskId);
-      const updateData = { status };
-      if (status === "completed") {
-        updateData.completedAt = serverTimestamp();
-      }
-      await updateDoc(taskRef, updateData);
-    } catch (error) {
-      throw error.message;
-    }
-  },
-
-  // --- IMPROVED BIDDING FUNCTIONS (USING SUBCOLLECTIONS) ---
-
-  /**
-   * Submit a bid to a specific task (Subcollection: tasks/{taskId}/bids)
-   */
-  submitBid: async (
-    taskId,
-    taskerId,
-    amount,
-    note,
-    taskerName,
-    taskerPhoto,
-  ) => {
-    try {
-      const bidsRef = collection(db, "tasks", taskId, "bids");
-      await addDoc(bidsRef, {
-        taskerId,
-        taskerName,
-        taskerPhoto: taskerPhoto || null,
-        amount: parseFloat(amount),
-        note,
-        createdAt: serverTimestamp(),
-        status: "pending",
-      });
-
-      // Optional: Increment bid count on main task
-      // await updateDoc(doc(db, "tasks", taskId), { bidsCount: increment(1) });
-
-      return { success: true };
-    } catch (error) {
-      console.error("Error submitting bid:", error);
       throw error;
     }
   },
 
-  /**
-   * Real-time listener for bids on a specific task
-   */
+  // Listen to tasks posted by a specific client
+  listenToClientTasks: (clientId, callback) => {
+    const q = query(
+      collection(db, "tasks"),
+      where("clientId", "==", clientId),
+      orderBy("createdAt", "desc"),
+    );
+    // Returns the unsubscribe function directly
+    return onSnapshot(q, (snapshot) => {
+      const tasks = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(tasks);
+    });
+  },
+
+  // Listen to available tasks for Taskers (Open status)
+  listenToAvailableTasks: (callback) => {
+    const q = query(
+      collection(db, "tasks"),
+      where("status", "==", "Open"),
+      orderBy("createdAt", "desc"),
+    );
+    return onSnapshot(q, (snapshot) => {
+      const tasks = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(tasks);
+    });
+  },
+
+  // Listen to bids for a specific task
   listenToBidsForTask: (taskId, callback) => {
     const q = query(
-      collection(db, "tasks", taskId, "bids"), // Targeting subcollection
-      orderBy("amount", "asc"), // Order by lowest price first
+      collection(db, "tasks", taskId, "bids"),
+      orderBy("createdAt", "desc"),
     );
-
     return onSnapshot(q, (snapshot) => {
-      const bids = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      const bids = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
       callback(bids);
     });
   },
 
-  /**
-   * Accept a bid: Updates task status and rejects other bids
-   */
-  acceptBid: async (taskId, bidId, taskerId, price, taskerName) => {
-    try {
-      const batch = writeBatch(db);
+  // Place a bid on a task
+  placeBid: async (taskId, bidData) => {
+    const batch = writeBatch(db);
+    const bidRef = doc(collection(db, "tasks", taskId, "bids"));
+    const taskRef = doc(db, "tasks", taskId);
 
-      // 1. Update the Main Task
-      const taskRef = doc(db, "tasks", taskId);
-      batch.update(taskRef, {
-        status: "accepted",
-        assignedTo: taskerId,
-        taskerName: taskerName,
-        price: parseFloat(price),
-        acceptedAt: serverTimestamp(),
-      });
+    batch.set(bidRef, {
+      ...bidData,
+      createdAt: serverTimestamp(),
+    });
 
-      // 2. Mark the selected bid as accepted
-      const selectedBidRef = doc(db, "tasks", taskId, "bids", bidId);
-      batch.update(selectedBidRef, { status: "accepted" });
+    // Increment bid count on the task
+    // Note: In a real app, use increment()
+    batch.update(taskRef, {
+      bidsCount: (bidData.bidsCount || 0) + 1,
+    });
 
-      // 3. Reject all other bids (Optional but recommended)
-      const otherBidsQuery = query(
-        collection(db, "tasks", taskId, "bids"),
-        where("status", "==", "pending"),
-      );
-      const otherBidsSnapshot = await getDocs(otherBidsQuery);
+    await batch.commit();
+    return bidRef.id;
+  },
 
-      otherBidsSnapshot.forEach((doc) => {
-        if (doc.id !== bidId) {
-          batch.update(doc.ref, { status: "rejected" });
-        }
-      });
+  // Accept a bid
+  acceptBid: async (taskId, bidId, taskerId, amount, taskerName) => {
+    const batch = writeBatch(db);
+    const taskRef = doc(db, "tasks", taskId);
+    const bidRef = doc(db, "tasks", taskId, "bids", bidId);
 
-      await batch.commit();
-      return { success: true };
-    } catch (error) {
-      console.error("Error accepting bid:", error);
-      throw error;
-    }
+    // Update task status and assigned Tasker
+    batch.update(taskRef, {
+      status: "Assigned",
+      assignedTo: taskerId,
+      assignedTaskerName: taskerName,
+      acceptedBidId: bidId,
+      finalPrice: amount,
+    });
+
+    // Update the winning bid status
+    batch.update(bidRef, {
+      status: "Accepted",
+    });
+
+    await batch.commit();
+  },
+
+  // Listen to jobs assigned to a specific Tasker
+  listenToTaskerJobs: (taskerId, callback) => {
+    const q = query(
+      collection(db, "tasks"),
+      where("assignedTo", "==", taskerId),
+      orderBy("createdAt", "desc"),
+    );
+    return onSnapshot(q, (snapshot) => {
+      const jobs = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(jobs);
+    });
   },
 };

@@ -1,3 +1,4 @@
+// scr/screens/clients/MyErrandsScreen.js
 import React, { useState, useEffect } from "react";
 import { View, FlatList, ActivityIndicator, StyleSheet } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,7 +16,7 @@ const MyErrandsScreen = ({ navigation }) => {
   const isFocused = useIsFocused();
 
   useEffect(() => {
-    // 1. Define variable HERE
+    // 1. Define 'unsubscribe' in the effect scope
     let unsubscribe;
 
     const fetchTasks = () => {
@@ -23,7 +24,7 @@ const MyErrandsScreen = ({ navigation }) => {
 
       setIsLoading(true);
       try {
-        // 2. Assign listener
+        // 2. Assign the listener
         unsubscribe = firebaseTaskService.listenToClientTasks(
           user.uid,
           (allTasks) => {
@@ -75,12 +76,11 @@ const MyErrandsScreen = ({ navigation }) => {
             />
           )}
           ListEmptyComponent={
-            <CustomText
-              align="center"
-              style={{ marginTop: 50, color: colors.gray500 }}
-            >
-              You haven't posted any errands yet.
-            </CustomText>
+            <View style={{ padding: 20, alignItems: "center" }}>
+              <CustomText color="gray500">
+                You haven't posted any errands yet.
+              </CustomText>
+            </View>
           }
         />
       )}

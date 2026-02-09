@@ -1,55 +1,44 @@
-// src/services/firebaseChatService.js
 import {
   collection,
   addDoc,
-  onSnapshot,
   query,
+  where,
   orderBy,
+  onSnapshot,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "../config/firebase";
 
-// Define the path for the messages sub-collection
-const getMessagesCollection = (taskId) => {
-  return collection(db, "chats", taskId, "messages");
-};
+export const firebaseChatService = {
+  // 1. Send a Message
+  sendMessage: async (taskId, senderId, text) => {
+    try {
+      await addDoc(collection(db, "chats"), {
+        taskId: taskId,
+        senderId: senderId,
+        text: text,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Error sending message:", error);
+      throw error;
+    }
+  },
 
-/**
- * Listens for real-time message updates for a specific task.
- * @param {string} taskId - The ID of the task (which acts as the chat room ID).
- * @param {function} callback - Function to call with the new messages array.
- * @returns {function} - The unsubscribe function from onSnapshot.
- */
-export const listenToMessages = (taskId, callback) => {
-  const messagesCollection = getMessagesCollection(taskId);
-  const q = query(messagesCollection, orderBy("createdAt", "asc"));
+  // 2. Listen for Messages (Real-time)
+  listenToMessages: (taskId, callback) => {
+    const q = query(
+      collection(db, "chats"),
+      where("taskId", "==", taskId),
+      orderBy("createdAt", "asc"),
+    );
 
-  // onSnapshot returns an unsubscribe function
-  const unsubscribe = onSnapshot(q, (querySnapshot) => {
-    const messages = [];
-    querySnapshot.forEach((doc) => {
-      messages.push({ id: doc.id, ...doc.data() });
+    return onSnapshot(q, (snapshot) => {
+      const messages = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      }));
+      callback(messages);
     });
-    callback(messages);
-  });
-
-  return unsubscribe;
-};
-
-/**
- * Sends a new message to a chat room.
- * @param {string} taskId - The ID of the task (chat room).
- * @param {object} messageData - The message object to send.
- */
-export const sendMessage = async (taskId, messageData) => {
-  try {
-    const messagesCollection = getMessagesCollection(taskId);
-    await addDoc(messagesCollection, {
-      ...messageData,
-      createdAt: serverTimestamp(), // Use server timestamp for reliable ordering
-    });
-  } catch (error) {
-    console.error("Error sending message:", error);
-    throw new Error("Failed to send message.");
-  }
+  },
 };

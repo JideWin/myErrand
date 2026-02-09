@@ -1,258 +1,200 @@
-// src/screens/shared/NotificationsScreen.js
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Switch } from 'react-native';
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+} from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  collection,
+  query,
+  where,
+  orderBy,
+  onSnapshot,
+  doc,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "../../config/firebase";
+import { useAuth } from "../../context/AuthContext";
+import { CustomText } from "../../components/CustomText";
+import { colors, spacing, shadows } from "../../components/theme";
+import Icon from "../../components/Icon";
+// REMOVED: import { formatDistanceToNow } from "date-fns";
 
 const NotificationsScreen = ({ navigation }) => {
-  const [notifications, setNotifications] = React.useState([
-    {
-      id: '1',
-      title: 'New Job Available',
-      message: 'A new house cleaning job is available in your area',
-      time: '2 hours ago',
-      read: false,
-    },
-    {
-      id: '2',
-      title: 'Job Accepted',
-      message: 'John Doe has accepted your grocery shopping request',
-      time: '5 hours ago',
-      read: true,
-    },
-    {
-      id: '3',
-      title: 'Payment Received',
-      message: 'You received $45 for the furniture assembly job',
-      time: '1 day ago',
-      read: true,
-    },
-    {
-      id: '4',
-      title: 'New Rating',
-      message: 'You received a 5-star rating from Sarah Johnson',
-      time: '2 days ago',
-      read: true,
-    },
-  ]);
+  const { user } = useAuth();
+  const [notifications, setNotifications] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const [settings, setSettings] = React.useState({
-    jobAlerts: true,
-    messages: true,
-    payments: true,
-    ratings: true,
-    promotions: false,
-  });
+  useEffect(() => {
+    if (!user) return;
 
-  const toggleSetting = (setting) => {
-    setSettings({
-      ...settings,
-      [setting]: !settings[setting],
+    const q = query(
+      collection(db, "notifications"),
+      where("userId", "==", user.uid),
+      orderBy("createdAt", "desc"),
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setNotifications(list);
+      setLoading(false);
     });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  const handlePress = async (item) => {
+    if (!item.read) {
+      const ref = doc(db, "notifications", item.id);
+      updateDoc(ref, { read: true });
+    }
+
+    if (item.type === "BID_RECEIVED") {
+      navigation.navigate("ClientBids", { taskId: item.relatedId });
+    } else if (item.type === "JOB_ASSIGNED") {
+      navigation.navigate("JobDetails", { job: { id: item.relatedId } });
+    } else if (item.type === "JOB_COMPLETED") {
+      navigation.navigate("MyErrands");
+    }
   };
 
-  const markAsRead = (id) => {
-    setNotifications(notifications.map(notification => 
-      notification.id === id ? { ...notification, read: true } : notification
-    ));
+  // Custom Time Formatter (No External Package Needed)
+  const getTimeAgo = (timestamp) => {
+    if (!timestamp) return "Just now";
+
+    // Handle Firestore Timestamp or JS Date
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    const seconds = Math.floor((new Date() - date) / 1000);
+
+    let interval = seconds / 31536000;
+    if (interval > 1) return Math.floor(interval) + " years ago";
+    interval = seconds / 2592000;
+    if (interval > 1) return Math.floor(interval) + " months ago";
+    interval = seconds / 86400;
+    if (interval > 1) return Math.floor(interval) + " days ago";
+    interval = seconds / 3600;
+    if (interval > 1) return Math.floor(interval) + " hours ago";
+    interval = seconds / 60;
+    if (interval > 1) return Math.floor(interval) + " minutes ago";
+    return "Just now";
+  };
+
+  const renderItem = ({ item }) => {
+    const isUnread = !item.read;
+    const bg = isUnread ? colors.primary + "10" : colors.white;
+
+    let iconName = "notifications";
+    let iconColor = colors.primary;
+    if (item.type === "BID_RECEIVED") {
+      iconName = "pricetag";
+      iconColor = colors.accent;
+    }
+    if (item.type === "JOB_ASSIGNED") {
+      iconName = "briefcase";
+      iconColor = "#10B981";
+    }
+    if (item.type === "ALERT") {
+      iconName = "alert-circle";
+      iconColor = colors.error;
+    }
+
+    return (
+      <TouchableOpacity
+        style={[styles.card, { backgroundColor: bg }, shadows.small]}
+        onPress={() => handlePress(item)}
+      >
+        <View style={styles.iconBox}>
+          <Icon name={iconName} size={24} color={iconColor} />
+          {isUnread && <View style={styles.dot} />}
+        </View>
+        <View style={{ flex: 1, marginLeft: 12 }}>
+          <CustomText type="h4" style={styles.title}>
+            {item.title}
+          </CustomText>
+          <CustomText color="gray600" numberOfLines={2} style={styles.body}>
+            {item.body}
+          </CustomText>
+          <CustomText type="caption" color="gray400" style={{ marginTop: 4 }}>
+            {getTimeAgo(item.createdAt)}
+          </CustomText>
+        </View>
+      </TouchableOpacity>
+    );
   };
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Text style={styles.backButton}>←</Text>
+          <Icon name="arrow-back" size={24} color={colors.gray800} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Notifications</Text>
-        <TouchableOpacity>
-          <Text style={styles.clearButton}>Clear All</Text>
-        </TouchableOpacity>
+        <CustomText type="h3" style={{ marginLeft: 15 }}>
+          Notifications
+        </CustomText>
       </View>
 
-      <ScrollView style={styles.content}>
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Notification Settings</Text>
-          <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Job Alerts</Text>
-              <Text style={styles.settingDescription}>Get notified about new jobs</Text>
-            </View>
-            <Switch
-              value={settings.jobAlerts}
-              onValueChange={() => toggleSetting('jobAlerts')}
-            />
-          </View>
-          <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Messages</Text>
-              <Text style={styles.settingDescription}>Notify about new messages</Text>
-            </View>
-            <Switch
-              value={settings.messages}
-              onValueChange={() => toggleSetting('messages')}
-            />
-          </View>
-          <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Payments</Text>
-              <Text style={styles.settingDescription}>Payment updates</Text>
-            </View>
-            <Switch
-              value={settings.payments}
-              onValueChange={() => toggleSetting('payments')}
-            />
-          </View>
-          <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Ratings</Text>
-              <Text style={styles.settingDescription}>New rating notifications</Text>
-            </View>
-            <Switch
-              value={settings.ratings}
-              onValueChange={() => toggleSetting('ratings')}
-            />
-          </View>
-          <View style={styles.settingItem}>
-            <View>
-              <Text style={styles.settingLabel}>Promotions</Text>
-              <Text style={styles.settingDescription}>Special offers and promotions</Text>
-            </View>
-            <Switch
-              value={settings.promotions}
-              onValueChange={() => toggleSetting('promotions')}
-            />
-          </View>
+      {loading ? (
+        <View style={styles.center}>
+          <ActivityIndicator color={colors.primary} />
         </View>
-
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Recent Notifications</Text>
-          {notifications.map((notification) => (
-            <TouchableOpacity
-              key={notification.id}
-              style={[
-                styles.notificationItem,
-                !notification.read && styles.unreadNotification
-              ]}
-              onPress={() => markAsRead(notification.id)}
-            >
-              <View style={styles.notificationContent}>
-                <Text style={styles.notificationTitle}>{notification.title}</Text>
-                <Text style={styles.notificationMessage}>{notification.message}</Text>
-                <Text style={styles.notificationTime}>{notification.time}</Text>
-              </View>
-              {!notification.read && <View style={styles.unreadDot} />}
-            </TouchableOpacity>
-          ))}
+      ) : notifications.length === 0 ? (
+        <View style={styles.center}>
+          <Icon
+            name="notifications-off-outline"
+            size={60}
+            color={colors.gray300}
+          />
+          <CustomText color="gray400" style={{ marginTop: 20 }}>
+            No notifications yet.
+          </CustomText>
         </View>
-      </ScrollView>
-    </View>
+      ) : (
+        <FlatList
+          data={notifications}
+          renderItem={renderItem}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: spacing.md }}
+        />
+      )}
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-  },
+  container: { flex: 1, backgroundColor: colors.gray50 },
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#ffffff',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    padding: spacing.md,
+    backgroundColor: colors.white,
+    borderBottomWidth: 1,
+    borderColor: colors.gray200,
   },
-  backButton: {
-    fontSize: 24,
-    color: '#3498db',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#2c3e50',
-  },
-  clearButton: {
-    color: '#3498db',
-    fontSize: 16,
-  },
-  content: {
-    flex: 1,
-    padding: 16,
-  },
-  section: {
-    backgroundColor: '#ffffff',
+  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  card: {
+    flexDirection: "row",
+    padding: spacing.md,
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
+    marginBottom: spacing.sm,
+    alignItems: "center",
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 16,
+  iconBox: { position: "relative" },
+  dot: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: colors.error,
+    borderWidth: 2,
+    borderColor: colors.white,
   },
-  settingItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  settingLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#2c3e50',
-    marginBottom: 4,
-  },
-  settingDescription: {
-    fontSize: 14,
-    color: '#7f8c8d',
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f1f2f6',
-  },
-  unreadNotification: {
-    backgroundColor: '#e3f2fd',
-    marginHorizontal: -16,
-    paddingHorizontal: 16,
-  },
-  notificationContent: {
-    flex: 1,
-  },
-  notificationTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#2c3e50',
-    marginBottom: 4,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#7f8c8d',
-    marginBottom: 4,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#bdc3c7',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#3498db',
-    marginLeft: 8,
-  },
+  title: { marginBottom: 2 },
+  body: { fontSize: 14 },
 });
 
 export default NotificationsScreen;

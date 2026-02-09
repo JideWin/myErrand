@@ -1,78 +1,54 @@
-// src/components/Button.js
-import React from 'react';
-import { TouchableOpacity, ActivityIndicator } from 'react-native';
-import { CustomText } from './CustomText';
-import { colors } from './CustomText';
+// scr/components/Button.js
+import React from "react";
+import { TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import { CustomText } from "./CustomText";
+// FIXED: Import colors from theme, NOT from CustomText
+import { colors, spacing } from "./theme";
 
-const Button = ({ 
-  children, 
-  variant = 'primary', 
-  size = 'medium',
+const Button = ({
+  title,
+  onPress,
   loading = false,
   disabled = false,
   style,
   textStyle,
-  ...props 
 }) => {
-  const getButtonStyles = () => {
-    const base = {
-      borderRadius: 12,
-      alignItems: 'center',
-      justifyContent: 'center',
-      flexDirection: 'row',
-    };
-
-    const variants = {
-      primary: {
-        backgroundColor: disabled ? colors.gray300 : colors.primary,
-      },
-      secondary: {
-        backgroundColor: 'transparent',
-        borderWidth: 2,
-        borderColor: disabled ? colors.gray300 : colors.primary,
-      },
-      ghost: {
-        backgroundColor: 'transparent',
-      },
-    };
-
-    const sizes = {
-      small: { paddingVertical: 8, paddingHorizontal: 16 },
-      medium: { paddingVertical: 12, paddingHorizontal: 24 },
-      large: { paddingVertical: 16, paddingHorizontal: 32 },
-    };
-
-    return { ...base, ...variants[variant], ...sizes[size] };
-  };
-
-  const getTextStyles = () => {
-    const variants = {
-      primary: { color: colors.white },
-      secondary: { color: disabled ? colors.gray300 : colors.primary },
-      ghost: { color: disabled ? colors.gray300 : colors.primary },
-    };
-
-    return variants[variant];
-  };
-
   return (
     <TouchableOpacity
-      style={[getButtonStyles(), style]}
+      onPress={onPress}
       disabled={disabled || loading}
-      {...props}
+      activeOpacity={0.8}
+      style={[styles.button, disabled && styles.disabled, style]}
     >
       {loading ? (
-        <ActivityIndicator color={getTextStyles().color} />
+        <ActivityIndicator color={colors.white} />
       ) : (
-        <CustomText
-          weight="600"
-          style={[getTextStyles(), textStyle]}
-        >
-          {children}
+        <CustomText type="h3" style={[styles.text, textStyle]}>
+          {title}
         </CustomText>
       )}
     </TouchableOpacity>
   );
 };
+
+const styles = StyleSheet.create({
+  button: {
+    backgroundColor: colors.primary,
+    paddingVertical: 14,
+    paddingHorizontal: spacing.lg,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    marginVertical: 10,
+  },
+  disabled: {
+    backgroundColor: colors.gray200,
+  },
+  text: {
+    color: colors.white,
+    fontWeight: "bold",
+  },
+});
 
 export default Button;
