@@ -27,35 +27,55 @@ import Button from "../../components/Button";
 
 const PaymentMethodsScreen = ({ navigation }) => {
   const { user } = useAuth();
+
+  // State for Data
   const [methods, setMethods] = useState([]);
+  const [balance, setBalance] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  // State for UI
   const [showAddCard, setShowAddCard] = useState(false);
 
-  // New Card State
+  // State for New Card Form
   const [cardNumber, setCardNumber] = useState("");
   const [expiry, setExpiry] = useState("");
   const [cvv, setCvv] = useState("");
   const [adding, setAdding] = useState(false);
 
-  // 1. Fetch Saved Payment Methods
+  // --- 1. REAL-TIME LISTENERS ---
   useEffect(() => {
     if (!user) return;
 
-    const q = query(
+    // Listener A: Get Saved Cards
+    const cardsQuery = query(
       collection(db, "paymentMethods"),
       where("userId", "==", user.uid),
     );
-
-    const unsubscribe = onSnapshot(q, (snapshot) => {
+    const unsubscribeCards = onSnapshot(cardsQuery, (snapshot) => {
       const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
       setMethods(list);
       setLoading(false);
     });
 
-    return () => unsubscribe();
+    // Listener B: Get Wallet Balance (Live Updates)
+    const userRef = doc(db, "users", user.uid);
+    const unsubscribeUser = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        const userData = docSnap.data();
+        // Default to 0 if walletBalance doesn't exist yet
+        setBalance(userData.walletBalance || 0);
+      }
+    });
+
+    // Cleanup listeners when leaving screen
+    return () => {
+      unsubscribeCards();
+      unsubscribeUser();
+    };
   }, [user]);
 
-  // 2. Add New Card
+  // --- 2. ACTIONS ---
+
   const handleAddCard = async () => {
     if (cardNumber.length < 16 || expiry.length < 5 || cvv.length < 3) {
       Alert.alert("Invalid Input", "Please check your card details.");
@@ -68,24 +88,25 @@ const PaymentMethodsScreen = ({ navigation }) => {
         userId: user.uid,
         type: "card",
         last4: cardNumber.slice(-4),
-        brand: "MasterCard", // logic to detect brand can be added
+        brand: "MasterCard", // You can add logic to detect Visa/MasterCard
         expiry: expiry,
         createdAt: new Date(),
       });
 
+      // Reset Form
       setCardNumber("");
       setExpiry("");
       setCvv("");
       setShowAddCard(false);
       Alert.alert("Success", "Card added successfully!");
     } catch (error) {
+      console.error(error);
       Alert.alert("Error", "Could not save card.");
     } finally {
       setAdding(false);
     }
   };
 
-  // 3. Delete Card
   const handleDelete = (id) => {
     Alert.alert("Remove Card", "Are you sure?", [
       { text: "Cancel", style: "cancel" },
@@ -96,6 +117,8 @@ const PaymentMethodsScreen = ({ navigation }) => {
       },
     ]);
   };
+
+  // --- 3. RENDER ---
 
   return (
     <SafeAreaView style={styles.container}>
@@ -113,15 +136,23 @@ const PaymentMethodsScreen = ({ navigation }) => {
         {/* Wallet Balance Card */}
         <View style={[styles.walletCard, shadows.medium]}>
           <View>
-            <CustomText color="white" style={{ opacity: 0.8 }}>
-              Wallet Balance
+            <CustomText color="white" style={{ opacity: 0.9, fontSize: 14 }}>
+              My Wallet Balance
             </CustomText>
-            <CustomText type="h1" color="white" style={{ marginTop: 5 }}>
-              ₦0.00
+            <CustomText
+              type="h1"
+              color="white"
+              style={{ marginTop: 8, fontSize: 32 }}
+            >
+              ₦
+              {balance.toLocaleString(undefined, {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}
             </CustomText>
           </View>
           <View style={styles.walletIcon}>
-            <Icon name="wallet" size={24} color={colors.primary} />
+            <Icon name="wallet" size={28} color={colors.primary} />
           </View>
         </View>
 
@@ -132,9 +163,12 @@ const PaymentMethodsScreen = ({ navigation }) => {
           </CustomText>
 
           {loading ? (
-            <ActivityIndicator color={colors.primary} />
+            <ActivityIndicator color={colors.primary} size="small" />
           ) : methods.length === 0 ? (
-            <CustomText color="gray500" style={{ fontStyle: "italic" }}>
+            <CustomText
+              color="gray500"
+              style={{ fontStyle: "italic", marginBottom: 10 }}
+            >
               No cards saved yet.
             </CustomText>
           ) : (
@@ -151,7 +185,10 @@ const PaymentMethodsScreen = ({ navigation }) => {
                     </CustomText>
                   </View>
                 </View>
-                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                <TouchableOpacity
+                  onPress={() => handleDelete(item.id)}
+                  style={{ padding: 5 }}
+                >
                   <Icon name="trash-outline" size={20} color={colors.error} />
                 </TouchableOpacity>
               </View>
@@ -162,7 +199,7 @@ const PaymentMethodsScreen = ({ navigation }) => {
         {/* Add New Card Form */}
         {showAddCard ? (
           <View style={styles.addForm}>
-            <CustomText type="h4" style={{ marginBottom: 10 }}>
+            <CustomText type="h4" style={{ marginBottom: 15 }}>
               Add New Card
             </CustomText>
 
@@ -240,10 +277,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.xl,
   },
   walletIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.white,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: "center",
     alignItems: "center",
   },
@@ -262,17 +299,20 @@ const styles = StyleSheet.create({
   addForm: {
     backgroundColor: colors.white,
     padding: spacing.md,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: colors.gray200,
+    ...shadows.small,
   },
   input: {
     backgroundColor: colors.gray50,
     borderWidth: 1,
     borderColor: colors.gray300,
-    borderRadius: 8,
-    padding: spacing.md,
+    borderRadius: 10,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
     marginBottom: spacing.md,
+    fontSize: 16,
   },
 });
 

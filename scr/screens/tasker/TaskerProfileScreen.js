@@ -1,194 +1,199 @@
-import React from "react";
+import React, { useContext, useEffect, useState } from "react";
 import {
   View,
   StyleSheet,
   ScrollView,
   TouchableOpacity,
-  Alert,
   Image,
+  Alert,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useAuth } from "../../context/AuthContext";
-import { CustomText } from "../../components/CustomText";
+import { AuthContext } from "../../context/AuthContext";
 import { colors, spacing, shadows } from "../../components/theme";
+import { CustomText } from "../../components/CustomText";
 import Icon from "../../components/Icon";
+import { doc, onSnapshot } from "firebase/firestore"; // Import Firestore Listener
+import { db } from "../../config/firebase";
 
 const TaskerProfileScreen = ({ navigation }) => {
-  const { user, signOut } = useAuth();
+  const { user, logout } = useContext(AuthContext);
+  const [profileData, setProfileData] = useState(user || {});
+
+  // --- LIVE LISTENER FOR STATS ---
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const userRef = doc(db, "users", user.uid);
+    const unsubscribe = onSnapshot(userRef, (docSnap) => {
+      if (docSnap.exists()) {
+        setProfileData({ ...user, ...docSnap.data() }); // Merge live data
+      }
+    });
+
+    return () => unsubscribe();
+  }, [user]);
 
   const handleLogout = () => {
     Alert.alert("Log Out", "Are you sure you want to log out?", [
       { text: "Cancel", style: "cancel" },
-      {
-        text: "Log Out",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            await signOut();
-          } catch (error) {
-            Alert.alert("Error", error.message);
-          }
-        },
-      },
+      { text: "Log Out", style: "destructive", onPress: logout },
     ]);
   };
 
-  const MenuItem = ({ icon, label, onPress, isDestructive = false }) => (
-    <TouchableOpacity style={styles.menuItem} onPress={onPress}>
-      <View
-        style={[styles.iconBox, isDestructive && styles.destructiveIconBox]}
-      >
-        <Icon
-          name={icon}
-          size={22}
-          color={isDestructive ? colors.error : colors.accent}
-        />
-      </View>
-      <View style={styles.menuContent}>
+  const MenuItem = ({ icon, label, onPress, destructive }) => (
+    <TouchableOpacity
+      style={[styles.menuItem, destructive && styles.destructiveItem]}
+      onPress={onPress}
+    >
+      <View style={styles.menuLeft}>
+        <View
+          style={[
+            styles.iconBox,
+            destructive && { backgroundColor: "#FEE2E2" },
+          ]}
+        >
+          <Icon
+            name={icon}
+            size={20}
+            color={destructive ? colors.error : colors.primary}
+          />
+        </View>
         <CustomText
-          style={[styles.menuText, isDestructive && styles.destructiveText]}
+          style={[styles.menuText, destructive && { color: colors.error }]}
         >
           {label}
         </CustomText>
       </View>
-      <Icon name="chevron-forward" size={20} color={colors.gray400} />
+      <Icon
+        name="chevron-forward"
+        size={20}
+        color={destructive ? colors.error : colors.gray400}
+      />
     </TouchableOpacity>
+  );
+
+  const StatBox = ({ label, value, icon, isMoney }) => (
+    <View style={styles.statBox}>
+      <Icon
+        name={icon}
+        size={24}
+        color={colors.primary}
+        style={{ marginBottom: 5 }}
+      />
+      <CustomText type="h2" color="primary">
+        {isMoney ? `₦${(value || 0).toLocaleString()}` : value || 0}
+      </CustomText>
+      <CustomText type="caption" color="gray500">
+        {label}
+      </CustomText>
+    </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={styles.scroll}
-        showsVerticalScrollIndicator={false}
-      >
-        {/* --- HEADER --- */}
+      <ScrollView contentContainerStyle={styles.scroll}>
+        {/* Header */}
         <View style={styles.header}>
-          <View style={[styles.avatarContainer, shadows.medium]}>
-            <Image
-              source={{
-                uri: `https://ui-avatars.com/api/?name=${user?.displayName || "Tasker"}&background=4f46e5&color=fff&size=128&bold=true`,
-              }}
-              style={styles.avatar}
-            />
-            <View style={styles.editBadge}>
-              <Icon name="pencil" size={12} color="white" />
-            </View>
-          </View>
-
-          <CustomText type="h2" style={styles.name}>
-            {user?.displayName || "Tasker Name"}
-          </CustomText>
-          <View style={styles.verifiedBadge}>
-            <Icon name="checkmark-circle" size={16} color={colors.white} />
-            <CustomText
-              type="caption"
-              color="white"
-              style={{ marginLeft: 4, fontWeight: "700" }}
-            >
-              VERIFIED WORKER
-            </CustomText>
-          </View>
-        </View>
-
-        {/* --- EARNINGS DASHBOARD --- */}
-        <View style={[styles.statsContainer, shadows.light]}>
-          <View style={styles.statItem}>
-            <CustomText type="h2" color="accent">
-              ₦0
-            </CustomText>
-            <CustomText type="caption" color="gray500">
-              Wallet
-            </CustomText>
-          </View>
-          <View style={styles.verticalDivider} />
-          <View style={styles.statItem}>
-            <CustomText type="h2" color="primary">
-              0
-            </CustomText>
-            <CustomText type="caption" color="gray500">
-              Jobs Done
-            </CustomText>
-          </View>
-          <View style={styles.verticalDivider} />
-          <View style={styles.statItem}>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <CustomText type="h2" color="warning">
-                5.0
+          <View style={styles.profileInfo}>
+            <View>
+              <CustomText type="h2" style={{ marginBottom: 4 }}>
+                {profileData.fullName || "Tasker Name"}
               </CustomText>
-              <Icon
-                name="star"
-                size={16}
-                color="#fbbf24"
-                style={{ marginLeft: 2 }}
-              />
+              <View style={styles.badge}>
+                <Icon name="checkmark-circle" size={14} color="white" />
+                <CustomText
+                  type="caption"
+                  color="white"
+                  style={{ marginLeft: 4, fontWeight: "bold" }}
+                >
+                  VERIFIED WORKER
+                </CustomText>
+              </View>
             </View>
-            <CustomText type="caption" color="gray500">
-              Rating
-            </CustomText>
+            <TouchableOpacity style={styles.avatarContainer}>
+              <Image
+                source={{ uri: "https://i.pravatar.cc/150?img=12" }}
+                style={styles.avatar}
+              />
+              <View style={styles.editBadge}>
+                <Icon name="pencil" size={12} color="white" />
+              </View>
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* --- MENU SECTIONS --- */}
-        <View style={styles.section}>
-          <CustomText type="caption" style={styles.sectionTitle}>
-            WORK PREFERENCES
-          </CustomText>
-          <MenuItem
-            icon="hammer-outline"
-            label="My Skills & Services"
-            onPress={() => {}}
+        {/* Stats Dashboard */}
+        <View style={[styles.statsContainer, shadows.medium]}>
+          <StatBox
+            label="Wallet Balance"
+            value={profileData.walletBalance}
+            icon="wallet"
+            isMoney
           />
-          <MenuItem
-            icon="map-outline"
-            label="Service Area"
-            onPress={() => {}}
+          <View style={styles.divider} />
+          <StatBox
+            label="Jobs Done"
+            value={profileData.jobsCompleted} // <--- READS FROM FIREBASE NOW
+            icon="briefcase"
           />
-          <MenuItem
-            icon="calendar-outline"
-            label="Availability"
-            onPress={() => {}}
+          <View style={styles.divider} />
+          <StatBox
+            label="Total Earnings"
+            value={profileData.totalEarnings} // <--- READS FROM FIREBASE NOW
+            icon="cash"
+            isMoney
           />
         </View>
 
+        {/* Menu Sections */}
         <View style={styles.section}>
-          <CustomText type="caption" style={styles.sectionTitle}>
-            FINANCE
+          <CustomText type="h4" style={styles.sectionTitle}>
+            Work Preferences
           </CustomText>
           <MenuItem
-            icon="wallet-outline"
-            label="Bank Details"
+            icon="construct"
+            label="My Skills & Services"
+            onPress={() => navigation.navigate("Services")}
+          />
+          <MenuItem icon="map" label="Service Area" onPress={() => {}} />
+          <MenuItem icon="calendar" label="Availability" onPress={() => {}} />
+        </View>
+
+        <View style={styles.section}>
+          <CustomText type="h4" style={styles.sectionTitle}>
+            Finance
+          </CustomText>
+          <MenuItem
+            icon="card"
+            label="Withdraw Funds"
             onPress={() => navigation.navigate("PaymentMethods")}
           />
           <MenuItem
-            icon="document-text-outline"
+            icon="time"
             label="Transaction History"
             onPress={() => {}}
           />
         </View>
 
         <View style={styles.section}>
-          <CustomText type="caption" style={styles.sectionTitle}>
-            ACCOUNT
+          <CustomText type="h4" style={styles.sectionTitle}>
+            Account
           </CustomText>
           <MenuItem
-            icon="settings-outline"
+            icon="settings"
             label="Settings"
             onPress={() => navigation.navigate("Settings")}
           />
           <MenuItem
-            icon="help-circle-outline"
+            icon="help-circle"
             label="Help & Support"
             onPress={() => {}}
           />
-        </View>
-
-        {/* --- LOGOUT --- */}
-        <View style={[styles.section, { marginBottom: 30 }]}>
           <MenuItem
-            icon="log-out-outline"
+            icon="log-out"
             label="Log Out"
+            destructive
             onPress={handleLogout}
-            isDestructive={true}
           />
         </View>
       </ScrollView>
@@ -198,107 +203,97 @@ const TaskerProfileScreen = ({ navigation }) => {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.gray50 },
-  scroll: { paddingBottom: spacing.xl },
-
+  scroll: { paddingBottom: 40 },
   header: {
-    alignItems: "center",
-    paddingVertical: spacing.xl,
+    padding: spacing.xl,
     backgroundColor: colors.white,
     borderBottomLeftRadius: 30,
     borderBottomRightRadius: 30,
-    ...shadows.light,
+    ...shadows.small,
   },
-  avatarContainer: {
-    position: "relative",
-    marginBottom: spacing.md,
+  profileInfo: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    alignSelf: "flex-start",
+  },
+  avatarContainer: { position: "relative" },
   avatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    borderWidth: 4,
-    borderColor: colors.white,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    borderWidth: 3,
+    borderColor: colors.gray100,
   },
   editBadge: {
     position: "absolute",
     bottom: 0,
     right: 0,
-    backgroundColor: colors.accent,
-    width: 30,
-    height: 30,
-    borderRadius: 15,
+    backgroundColor: colors.primary,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
     borderColor: colors.white,
   },
-  name: { marginBottom: 8 },
-  verifiedBadge: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: colors.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-
   statsContainer: {
     flexDirection: "row",
-    backgroundColor: colors.white,
-    marginHorizontal: spacing.lg,
-    marginTop: -25, // Overlap the header
-    borderRadius: 16,
-    padding: spacing.lg,
     justifyContent: "space-between",
-    alignItems: "center",
+    backgroundColor: colors.white,
+    margin: spacing.lg,
+    marginTop: -20,
+    borderRadius: 16,
+    padding: spacing.md,
   },
-  statItem: { alignItems: "center", flex: 1 },
-  verticalDivider: {
+  statBox: { flex: 1, alignItems: "center", justifyContent: "center" },
+  divider: {
     width: 1,
-    height: 30,
     backgroundColor: colors.gray200,
+    height: "80%",
+    alignSelf: "center",
   },
-
-  section: {
-    marginTop: spacing.xl,
-    paddingHorizontal: spacing.lg,
-  },
+  section: { marginTop: spacing.lg, paddingHorizontal: spacing.lg },
   sectionTitle: {
     marginBottom: spacing.sm,
-    marginLeft: spacing.sm,
-    color: colors.gray500,
-    fontWeight: "600",
+    marginLeft: spacing.xs,
+    color: colors.gray600,
   },
   menuItem: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
     backgroundColor: colors.white,
     padding: spacing.md,
-    marginBottom: spacing.xs,
     borderRadius: 12,
+    marginBottom: spacing.sm,
     borderWidth: 1,
     borderColor: colors.gray100,
   },
+  destructiveItem: { borderColor: "#FECACA", backgroundColor: "#FEF2F2" },
+  menuLeft: { flexDirection: "row", alignItems: "center" },
   iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gray50,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.primary + "15",
     justifyContent: "center",
     alignItems: "center",
-    marginRight: spacing.md,
+    marginRight: 12,
   },
-  destructiveIconBox: {
-    backgroundColor: "#FEE2E2", // Light red
-  },
-  menuContent: { flex: 1 },
   menuText: {
     fontSize: 16,
-    color: colors.gray800,
     fontFamily: "Poppins-Medium",
-  },
-  destructiveText: {
-    color: colors.error,
+    color: colors.gray800,
   },
 });
 

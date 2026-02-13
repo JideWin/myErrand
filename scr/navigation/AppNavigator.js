@@ -1,4 +1,4 @@
-import React, { useContext, useEffect, useState } from "react";
+import React, { useContext } from "react";
 import { View, ActivityIndicator, Text } from "react-native";
 import { createStackNavigator } from "@react-navigation/stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
@@ -21,7 +21,7 @@ import PostErrandScreen from "../screens/clients/PostErrandScreen";
 import MyErrandsScreen from "../screens/clients/MyErrandsScreen";
 import ClientProfileScreen from "../screens/clients/ClientProfileScreen";
 import ClientBidsScreen from "../screens/clients/ClientBidsScreen";
-import PaymentScreen from "../screens/clients/PaymentScreen"; // <--- NEW CHECKOUT SCREEN
+import PaymentScreen from "../screens/clients/PaymentScreen"; // Client-only payment
 
 // Tasker Screens
 import TaskerHomeScreen from "../screens/tasker/TaskerHomeScreen";
@@ -36,7 +36,7 @@ import JobDetailsScreen from "../screens/shared/JobDetailsScreen";
 import ChatScreen from "../screens/shared/ChatScreen";
 import NotificationsScreen from "../screens/shared/NotificationsScreen";
 import SettingsScreen from "../screens/shared/SettingsScreen";
-import PaymentMethodsScreen from "../screens/shared/PaymentMethodsScreen"; // EXISTING SETTINGS SCREEN
+import PaymentMethodsScreen from "../screens/shared/PaymentMethodsScreen";
 
 // Ignore irrelevant warnings
 LogBox.ignoreLogs(["AsyncStorage has been extracted", "The action 'REPLACE'"]);
@@ -44,16 +44,17 @@ LogBox.ignoreLogs(["AsyncStorage has been extracted", "The action 'REPLACE'"]);
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
 
-// --- SAFETY WRAPPER ---
+// Safe wrapper for missing components (useful during development)
 const SafeScreen = (Component, name) => {
-  return (
-    Component ||
-    (() => (
+  if (!Component) {
+    console.warn(`Missing component: ${name}`);
+    return () => (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <Text style={{ color: "red" }}>Missing Component: {name}</Text>
       </View>
-    ))
-  );
+    );
+  }
+  return Component;
 };
 
 // --- CLIENT TABS ---
@@ -187,16 +188,16 @@ const AppNavigator = () => {
           />
         </>
       ) : (
-        // === APP STACK ===
+        // === APP STACK (authenticated) ===
         <>
-          {/* Main Dashboard based on Role */}
+          {/* Main dashboard – only one of these is rendered based on role */}
           {user.role === "tasker" ? (
             <Stack.Screen name="TaskerMain" component={TaskerTabNavigator} />
           ) : (
             <Stack.Screen name="ClientMain" component={ClientTabNavigator} />
           )}
 
-          {/* Shared Screens */}
+          {/* Shared Screens – accessible by both roles */}
           <Stack.Screen
             name="JobDetails"
             component={SafeScreen(JobDetailsScreen, "JobDetails")}
@@ -225,14 +226,13 @@ const AppNavigator = () => {
             name="Services"
             component={SafeScreen(ServicesScreen, "Services")}
           />
-
-          {/* Settings Screen (Saved Cards) */}
           <Stack.Screen
             name="PaymentMethods"
             component={SafeScreen(PaymentMethodsScreen, "PaymentMethods")}
           />
 
-          {/* Checkout Screen (Pay for Job) */}
+          {/* Payment Screen – client-only; if taskers should not access it,
+               consider moving it inside the client stack or adding a role check in the screen itself. */}
           <Stack.Screen
             name="Payment"
             component={SafeScreen(PaymentScreen, "Payment")}

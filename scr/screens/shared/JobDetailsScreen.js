@@ -18,7 +18,6 @@ import Button from "../../components/Button";
 
 const JobDetailsScreen = ({ navigation, route }) => {
   const { user } = useAuth();
-  // Handle passing full job object OR just ID
   const params = route.params || {};
   const initialJob = params.job || {};
   const jobId = initialJob.id || params.jobId;
@@ -26,7 +25,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
   const [job, setJob] = useState(initialJob);
   const [loading, setLoading] = useState(!initialJob.id);
 
-  // 1. Live Listen to Job Updates
   useEffect(() => {
     if (!jobId) return;
 
@@ -43,7 +41,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
     return () => unsubscribe();
   }, [jobId]);
 
-  // --- LOGIC: DETERMINE PRICE ---
   const displayPrice = job.agreedPrice ? job.agreedPrice : job.budget;
   const priceLabel = job.agreedPrice ? "Agreed Price" : "Est. Budget";
 
@@ -51,14 +48,13 @@ const JobDetailsScreen = ({ navigation, route }) => {
   const isTasker = user?.uid === job.assignedTaskerId;
   const isAssigned = job.status === "Assigned" || job.status === "In Progress";
 
-  // --- ACTIONS ---
-
   const handleCompleteJob = () => {
-    // Instead of completing immediately, Go to Payment Screen
+    // FIX: We MUST pass 'taskerId' so the Payment Screen knows whose wallet to credit!
     navigation.navigate("Payment", {
       jobId: job.id,
       amount: displayPrice,
       taskerName: job.assignedTaskerName,
+      taskerId: job.assignedTaskerId, // <--- THIS LINE IS CRITICAL
     });
   };
 
@@ -87,7 +83,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -103,7 +98,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
           )}
         </View>
 
-        {/* STATUS BANNER */}
         <View
           style={[
             styles.statusBanner,
@@ -115,7 +109,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
           </CustomText>
         </View>
 
-        {/* MAIN CARD */}
         <View style={styles.content}>
           <CustomText type="h2" style={{ marginBottom: 5 }}>
             {job.title}
@@ -124,7 +117,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
             Posted by {job.clientName}
           </CustomText>
 
-          {/* PRICE CARD */}
           <View style={[styles.priceCard, shadows.small]}>
             <View>
               <CustomText
@@ -143,7 +135,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* DESCRIPTION */}
           <View style={styles.section}>
             <CustomText type="h4" style={{ marginBottom: 8 }}>
               Description
@@ -153,7 +144,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
             </CustomText>
           </View>
 
-          {/* LOCATION */}
           <View style={styles.section}>
             <CustomText type="h4" style={{ marginBottom: 8 }}>
               Location
@@ -166,9 +156,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* --- CONTEXT AWARE BUTTONS --- */}
-
-          {/* 1. OWNER VIEW */}
           {isOwner && (
             <View style={styles.actionArea}>
               {job.status === "Open" && (
@@ -208,18 +195,14 @@ const JobDetailsScreen = ({ navigation, route }) => {
             </View>
           )}
 
-          {/* 2. TASKER VIEW */}
           {user?.role === "tasker" && !isOwner && (
             <View style={styles.actionArea}>
-              {/* Tasker viewing OPEN job */}
               {job.status === "Open" && (
                 <Button
                   title="Place a Bid"
                   onPress={() => navigation.navigate("TaskerBid", { job })}
                 />
               )}
-
-              {/* Tasker viewing ASSIGNED job */}
               {isTasker && (
                 <>
                   <View style={styles.infoBox}>
@@ -245,7 +228,6 @@ const JobDetailsScreen = ({ navigation, route }) => {
   );
 };
 
-// Helper for status colors
 const getStatusColor = (status) => {
   switch (status) {
     case "Open":

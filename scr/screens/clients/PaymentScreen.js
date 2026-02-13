@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
@@ -14,6 +13,7 @@ import {
   serverTimestamp,
   addDoc,
   collection,
+  increment,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
 import { CustomText } from "../../components/CustomText";
@@ -23,32 +23,39 @@ import Button from "../../components/Button";
 
 const PaymentScreen = ({ navigation, route }) => {
   const params = route.params || {};
-  const { jobId, amount, taskerName } = params;
+  const { jobId, amount, taskerName, taskerId } = params;
 
   const [loading, setLoading] = useState(false);
   const [selectedMethod, setSelectedMethod] = useState("card");
 
   useEffect(() => {
     if (!jobId || !amount) {
-      Alert.alert("Error", "Payment details missing. Please go back.", [
-        { text: "Go Back", onPress: () => navigation.goBack() },
-      ]);
+      Alert.alert("Error", "Payment details missing.");
+      navigation.goBack();
     }
-  }, [jobId, amount]);
+    // Debug Check
+    if (!taskerId) {
+      console.log("WARNING: taskerId is MISSING in PaymentScreen params");
+    }
+  }, [jobId, amount, taskerId]);
 
   if (!jobId || !amount) return <View style={styles.container} />;
 
-  // Calculate Fees (5%)
   const subtotal = parseFloat(amount);
   const serviceFee = subtotal * 0.05;
   const total = subtotal + serviceFee;
 
   const handlePayNow = async () => {
+    if (!taskerId) {
+      Alert.alert("System Error", "Cannot pay: Tasker ID is missing.");
+      return;
+    }
+
     setLoading(true);
-    // Simulate payment delay
+
     setTimeout(async () => {
       try {
-        // 1. Mark Job as Paid
+        // 1. Mark Job Paid
         const jobRef = doc(db, "tasks", jobId);
         await updateDoc(jobRef, {
           status: "Completed",
@@ -57,7 +64,7 @@ const PaymentScreen = ({ navigation, route }) => {
           completedAt: serverTimestamp(),
         });
 
-        // 2. Record Transaction
+        // 2. Transaction Record
         await addDoc(collection(db, "transactions"), {
           jobId: jobId,
           amount: total,
@@ -66,14 +73,21 @@ const PaymentScreen = ({ navigation, route }) => {
           createdAt: serverTimestamp(),
         });
 
+        // 3. UPDATE TASKER STATS
+        const taskerWalletRef = doc(db, "users", taskerId);
+        await updateDoc(taskerWalletRef, {
+          walletBalance: increment(subtotal),
+          jobsCompleted: increment(1),
+          totalEarnings: increment(subtotal),
+        });
+
         setLoading(false);
-        Alert.alert(
-          "Success!",
-          `Payment of ₦${total.toLocaleString()} to ${taskerName} successful.`,
-          [{ text: "Done", onPress: () => navigation.navigate("ClientMain") }],
-        );
+        Alert.alert("Success!", `Payment to ${taskerName} successful.`, [
+          { text: "Done", onPress: () => navigation.navigate("ClientMain") },
+        ]);
       } catch (error) {
         setLoading(false);
+        console.error(error);
         Alert.alert("Error", "Payment failed. Please try again.");
       }
     }, 2000);
@@ -113,7 +127,6 @@ const PaymentScreen = ({ navigation, route }) => {
             <Icon name="close" size={24} color={colors.gray800} />
           </TouchableOpacity>
           <CustomText type="h3">Checkout</CustomText>
-          <View style={{ width: 24 }} />
         </View>
 
         <View style={styles.amountCard}>
