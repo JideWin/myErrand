@@ -21,7 +21,7 @@ import PostErrandScreen from "../screens/clients/PostErrandScreen";
 import MyErrandsScreen from "../screens/clients/MyErrandsScreen";
 import ClientProfileScreen from "../screens/clients/ClientProfileScreen";
 import ClientBidsScreen from "../screens/clients/ClientBidsScreen";
-import PaymentScreen from "../screens/clients/PaymentScreen"; // The Checkout Screen
+import PaymentScreen from "../screens/clients/PaymentScreen"; // <--- NEW CHECKOUT SCREEN
 
 // Tasker Screens
 import TaskerHomeScreen from "../screens/tasker/TaskerHomeScreen";
@@ -36,9 +36,7 @@ import JobDetailsScreen from "../screens/shared/JobDetailsScreen";
 import ChatScreen from "../screens/shared/ChatScreen";
 import NotificationsScreen from "../screens/shared/NotificationsScreen";
 import SettingsScreen from "../screens/shared/SettingsScreen";
-
-// FIX: Importing the correct singular name based on your file
-import PaymentMethodScreen from "../screens/shared/PaymentMethodScreen";
+import PaymentMethodsScreen from "../screens/shared/PaymentMethodsScreen"; // EXISTING SETTINGS SCREEN
 
 // Ignore irrelevant warnings
 LogBox.ignoreLogs(["AsyncStorage has been extracted", "The action 'REPLACE'"]);
@@ -228,13 +226,13 @@ const AppNavigator = () => {
             component={SafeScreen(ServicesScreen, "Services")}
           />
 
-          {/* Settings Screen: "Add a card" */}
+          {/* Settings Screen (Saved Cards) */}
           <Stack.Screen
-            name="PaymentMethod"
-            component={SafeScreen(PaymentMethodScreen, "PaymentMethod")}
+            name="PaymentMethods"
+            component={SafeScreen(PaymentMethodsScreen, "PaymentMethods")}
           />
 
-          {/* Checkout Screen: "Pay for a Job" */}
+          {/* Checkout Screen (Pay for Job) */}
           <Stack.Screen
             name="Payment"
             component={SafeScreen(PaymentScreen, "Payment")}

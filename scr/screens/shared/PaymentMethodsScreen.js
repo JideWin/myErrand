@@ -5,112 +5,97 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
+  TextInput,
   ActivityIndicator,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import {
-  doc,
-  updateDoc,
-  serverTimestamp,
-  addDoc,
   collection,
+  addDoc,
+  query,
+  where,
+  onSnapshot,
+  deleteDoc,
+  doc,
 } from "firebase/firestore";
 import { db } from "../../config/firebase";
+import { useAuth } from "../../context/AuthContext";
 import { CustomText } from "../../components/CustomText";
 import { colors, spacing, shadows } from "../../components/theme";
 import Icon from "../../components/Icon";
 import Button from "../../components/Button";
 
-const PaymentScreen = ({ navigation, route }) => {
-  // SAFETY FIX: Handle missing params (prevents crash on reload)
-  const params = route.params || {};
-  const { jobId, amount, taskerName } = params;
+const PaymentMethodsScreen = ({ navigation }) => {
+  const { user } = useAuth();
+  const [methods, setMethods] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddCard, setShowAddCard] = useState(false);
 
-  const [loading, setLoading] = useState(false);
-  const [selectedMethod, setSelectedMethod] = useState("card");
+  // New Card State
+  const [cardNumber, setCardNumber] = useState("");
+  const [expiry, setExpiry] = useState("");
+  const [cvv, setCvv] = useState("");
+  const [adding, setAdding] = useState(false);
 
-  // --- SAFETY CHECK ---
+  // 1. Fetch Saved Payment Methods
   useEffect(() => {
-    if (!jobId || !amount) {
-      Alert.alert(
-        "Session Expired",
-        "Payment details missing. Please try again from the Job page.",
-        [{ text: "Go Back", onPress: () => navigation.goBack() }],
-      );
+    if (!user) return;
+
+    const q = query(
+      collection(db, "paymentMethods"),
+      where("userId", "==", user.uid),
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      setMethods(list);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // 2. Add New Card
+  const handleAddCard = async () => {
+    if (cardNumber.length < 16 || expiry.length < 5 || cvv.length < 3) {
+      Alert.alert("Invalid Input", "Please check your card details.");
+      return;
     }
-  }, [jobId, amount]);
 
-  // If data is missing, show nothing (wait for redirect)
-  if (!jobId || !amount) return <View style={styles.container} />;
+    setAdding(true);
+    try {
+      await addDoc(collection(db, "paymentMethods"), {
+        userId: user.uid,
+        type: "card",
+        last4: cardNumber.slice(-4),
+        brand: "MasterCard", // logic to detect brand can be added
+        expiry: expiry,
+        createdAt: new Date(),
+      });
 
-  // Calculate Fees
-  const subtotal = parseFloat(amount);
-  const serviceFee = subtotal * 0.05; // 5% fee
-  const total = subtotal + serviceFee;
-
-  const handlePayNow = async () => {
-    setLoading(true);
-
-    // Simulate Network Delay
-    setTimeout(async () => {
-      try {
-        // 1. Mark Job as Completed & Paid
-        const jobRef = doc(db, "tasks", jobId);
-        await updateDoc(jobRef, {
-          status: "Completed",
-          paymentStatus: "Paid",
-          paidAmount: total,
-          completedAt: serverTimestamp(),
-        });
-
-        // 2. Create Transaction Record
-        await addDoc(collection(db, "transactions"), {
-          jobId: jobId,
-          amount: total,
-          method: selectedMethod,
-          status: "Success",
-          createdAt: serverTimestamp(),
-        });
-
-        setLoading(false);
-        Alert.alert(
-          "Payment Successful!",
-          `You paid ₦${total.toLocaleString()} to ${taskerName}.`,
-          [{ text: "Done", onPress: () => navigation.navigate("ClientMain") }],
-        );
-      } catch (error) {
-        setLoading(false);
-        console.error(error);
-        Alert.alert("Payment Failed", "Please try again.");
-      }
-    }, 2000);
+      setCardNumber("");
+      setExpiry("");
+      setCvv("");
+      setShowAddCard(false);
+      Alert.alert("Success", "Card added successfully!");
+    } catch (error) {
+      Alert.alert("Error", "Could not save card.");
+    } finally {
+      setAdding(false);
+    }
   };
 
-  const PaymentOption = ({ id, label, icon, subLabel }) => (
-    <TouchableOpacity
-      style={[styles.option, selectedMethod === id && styles.selectedOption]}
-      onPress={() => setSelectedMethod(id)}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center" }}>
-        <View style={styles.iconBox}>
-          <Icon
-            name={icon}
-            size={24}
-            color={selectedMethod === id ? colors.primary : colors.gray500}
-          />
-        </View>
-        <View style={{ marginLeft: 15 }}>
-          <CustomText type="h4">{label}</CustomText>
-          <CustomText type="caption" color="gray500">
-            {subLabel}
-          </CustomText>
-        </View>
-      </View>
-      <View style={styles.radioOuter}>
-        {selectedMethod === id && <View style={styles.radioInner} />}
-      </View>
-    </TouchableOpacity>
-  );
+  // 3. Delete Card
+  const handleDelete = (id) => {
+    Alert.alert("Remove Card", "Are you sure?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: async () => await deleteDoc(doc(db, "paymentMethods", id)),
+      },
+    ]);
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -118,95 +103,121 @@ const PaymentScreen = ({ navigation, route }) => {
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="close" size={24} color={colors.gray800} />
+            <Icon name="arrow-back" size={24} color={colors.gray800} />
           </TouchableOpacity>
-          <CustomText type="h3">Checkout</CustomText>
-          <View style={{ width: 24 }} />
-        </View>
-
-        {/* Amount Card */}
-        <View style={styles.amountCard}>
-          <CustomText color="gray500" style={{ textTransform: "uppercase" }}>
-            Total to Pay
-          </CustomText>
-          <CustomText
-            type="h1"
-            color="primary"
-            style={{ fontSize: 40, marginTop: 5 }}
-          >
-            ₦{total.toLocaleString()}
+          <CustomText type="h3" style={{ marginLeft: 15 }}>
+            Payment Methods
           </CustomText>
         </View>
 
-        {/* Bill Details */}
-        <View style={styles.section}>
-          <CustomText type="h4" style={{ marginBottom: 10 }}>
-            Payment Summary
-          </CustomText>
-          <View style={styles.row}>
-            <CustomText color="gray600">Job Price ({taskerName})</CustomText>
-            <CustomText>₦{subtotal.toLocaleString()}</CustomText>
-          </View>
-          <View style={styles.row}>
-            <CustomText color="gray600">Service Fee (5%)</CustomText>
-            <CustomText>₦{serviceFee.toLocaleString()}</CustomText>
-          </View>
-          <View style={[styles.row, styles.totalRow]}>
-            <CustomText type="bold">Total</CustomText>
-            <CustomText type="bold" color="primary">
-              ₦{total.toLocaleString()}
+        {/* Wallet Balance Card */}
+        <View style={[styles.walletCard, shadows.medium]}>
+          <View>
+            <CustomText color="white" style={{ opacity: 0.8 }}>
+              Wallet Balance
+            </CustomText>
+            <CustomText type="h1" color="white" style={{ marginTop: 5 }}>
+              ₦0.00
             </CustomText>
           </View>
+          <View style={styles.walletIcon}>
+            <Icon name="wallet" size={24} color={colors.primary} />
+          </View>
         </View>
 
-        {/* Payment Methods */}
+        {/* Saved Cards List */}
         <View style={styles.section}>
-          <CustomText type="h4" style={{ marginBottom: 10 }}>
-            Select Method
+          <CustomText type="h4" style={{ marginBottom: 15 }}>
+            Saved Cards
           </CustomText>
-          <PaymentOption
-            id="card"
-            label="Debit Card"
-            subLabel="**** 1234"
-            icon="card"
-          />
-          <PaymentOption
-            id="wallet"
-            label="My Wallet"
-            subLabel="Balance: ₦50,000"
-            icon="wallet"
-          />
-          <PaymentOption
-            id="cash"
-            label="Cash on Delivery"
-            subLabel="Pay directly to Tasker"
-            icon="cash"
-          />
-        </View>
-      </ScrollView>
 
-      {/* Footer Button */}
-      <View style={styles.footer}>
-        <Button
-          title={`Pay ₦${total.toLocaleString()}`}
-          onPress={handlePayNow}
-          loading={loading}
-          icon="lock-closed"
-        />
-        <View
-          style={{
-            flexDirection: "row",
-            justifyContent: "center",
-            marginTop: 10,
-            alignItems: "center",
-          }}
-        >
-          <Icon name="shield-checkmark" size={14} color={colors.gray500} />
-          <CustomText type="caption" color="gray500" style={{ marginLeft: 5 }}>
-            Payments are secure and encrypted
-          </CustomText>
+          {loading ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : methods.length === 0 ? (
+            <CustomText color="gray500" style={{ fontStyle: "italic" }}>
+              No cards saved yet.
+            </CustomText>
+          ) : (
+            methods.map((item) => (
+              <View key={item.id} style={styles.cardItem}>
+                <View style={{ flexDirection: "row", alignItems: "center" }}>
+                  <Icon name="card" size={24} color={colors.primary} />
+                  <View style={{ marginLeft: 15 }}>
+                    <CustomText type="bold">
+                      **** **** **** {item.last4}
+                    </CustomText>
+                    <CustomText type="caption" color="gray500">
+                      Expires {item.expiry}
+                    </CustomText>
+                  </View>
+                </View>
+                <TouchableOpacity onPress={() => handleDelete(item.id)}>
+                  <Icon name="trash-outline" size={20} color={colors.error} />
+                </TouchableOpacity>
+              </View>
+            ))
+          )}
         </View>
-      </View>
+
+        {/* Add New Card Form */}
+        {showAddCard ? (
+          <View style={styles.addForm}>
+            <CustomText type="h4" style={{ marginBottom: 10 }}>
+              Add New Card
+            </CustomText>
+
+            <TextInput
+              style={styles.input}
+              placeholder="Card Number"
+              keyboardType="numeric"
+              maxLength={16}
+              value={cardNumber}
+              onChangeText={setCardNumber}
+            />
+
+            <View style={{ flexDirection: "row", gap: 10 }}>
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="MM/YY"
+                maxLength={5}
+                value={expiry}
+                onChangeText={setExpiry}
+              />
+              <TextInput
+                style={[styles.input, { flex: 1 }]}
+                placeholder="CVV"
+                keyboardType="numeric"
+                maxLength={3}
+                value={cvv}
+                onChangeText={setCvv}
+              />
+            </View>
+
+            <View style={{ flexDirection: "row", gap: 10, marginTop: 10 }}>
+              <Button
+                title="Cancel"
+                type="outline"
+                style={{ flex: 1 }}
+                onPress={() => setShowAddCard(false)}
+              />
+              <Button
+                title="Save Card"
+                style={{ flex: 1 }}
+                loading={adding}
+                onPress={handleAddCard}
+              />
+            </View>
+          </View>
+        ) : (
+          <Button
+            title="Add New Card"
+            icon="add"
+            type="outline"
+            onPress={() => setShowAddCard(true)}
+            style={{ marginTop: 10 }}
+          />
+        )}
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -216,31 +227,28 @@ const styles = StyleSheet.create({
   scroll: { padding: spacing.lg },
   header: {
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "center",
     marginBottom: spacing.xl,
   },
-  amountCard: {
-    alignItems: "center",
+  walletCard: {
+    backgroundColor: colors.primary,
+    borderRadius: 16,
     padding: spacing.xl,
-    backgroundColor: colors.white,
-    borderRadius: 20,
-    marginBottom: spacing.xl,
-    ...shadows.medium,
-  },
-  section: { marginBottom: spacing.xl },
-  row: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 8,
+    alignItems: "center",
+    marginBottom: spacing.xl,
   },
-  totalRow: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: 1,
-    borderColor: colors.gray200,
+  walletIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: colors.white,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  option: {
+  section: { marginBottom: spacing.xl },
+  cardItem: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
@@ -251,39 +259,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.gray200,
   },
-  selectedOption: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primary + "05",
-  },
-  iconBox: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: colors.gray100,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  radioOuter: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.gray400,
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  radioInner: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: colors.primary,
-  },
-  footer: {
-    padding: spacing.lg,
+  addForm: {
     backgroundColor: colors.white,
-    borderTopWidth: 1,
+    padding: spacing.md,
+    borderRadius: 12,
+    borderWidth: 1,
     borderColor: colors.gray200,
+  },
+  input: {
+    backgroundColor: colors.gray50,
+    borderWidth: 1,
+    borderColor: colors.gray300,
+    borderRadius: 8,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
 });
 
-export default PaymentScreen;
+export default PaymentMethodsScreen;
