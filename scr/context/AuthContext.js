@@ -1,158 +1,129 @@
-import React, { createContext, useContext, useReducer, useEffect } from "react";
+import React, { createContext, useState, useEffect, useContext } from "react";
 import {
+  onAuthStateChanged,
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  onAuthStateChanged,
-  updateProfile,
+  signOut,
   sendEmailVerification,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { auth, db } from "../config/firebase";
 
-// 1. Create the Context
-export const AuthContext = createContext();
+const AuthContext = createContext();
 
-// 2. Define Initial State
-const initialState = {
-  user: null,
-  isLoading: true,
-};
-
-// 3. Reducer to manage state updates
-const authReducer = (state, action) => {
-  switch (action.type) {
-    case "SIGN_IN":
-      return { ...state, user: action.payload, isLoading: false };
-    case "SIGN_OUT":
-      return { ...state, user: null, isLoading: false };
-    case "INITIAL_CHECK_DONE":
-      return { ...state, isLoading: false };
-    default:
-      return state;
-  }
-};
-
-// 4. The Provider Component
 export const AuthProvider = ({ children }) => {
-  const [state, dispatch] = useReducer(authReducer, initialState);
+  const [user, setUser] = useState(null);
+  const [userRole, setUserRole] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); // For spinner on buttons
 
-  // --- SESSION RESTORATION & LISTENER ---
+  // 1. Monitor User Session
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
+    const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
+      if (authenticatedUser) {
+        // Fetch extra user details (Role, Name) from Firestore
         try {
-          // ANTI-FREEZE: Create a 5-second timeout
-          const timeout = new Promise((_, reject) =>
-            setTimeout(() => reject(new Error("Timeout")), 5000),
-          );
-
-          // Race: Try to get profile from DB, but give up after 5s
-          const userDoc = await Promise.race([
-            getDoc(doc(db, "users", firebaseUser.uid)),
-            timeout,
-          ]);
-
+          const userDoc = await getDoc(doc(db, "users", authenticatedUser.uid));
           if (userDoc.exists()) {
-            // Success: User found in DB
             const userData = userDoc.data();
-            dispatch({
-              type: "SIGN_IN",
-              payload: { ...firebaseUser, ...userData },
-            });
+            setUser({ ...authenticatedUser, ...userData });
+            setUserRole(userData.role);
           } else {
-            // Fallback: User in Auth but not DB -> Force Client Role
-            console.log("User doc not found, using fallback role.");
-            const fallbackUser = { ...firebaseUser, role: "client" };
-            dispatch({ type: "SIGN_IN", payload: fallbackUser });
+            setUser(authenticatedUser);
           }
         } catch (error) {
-          console.log(
-            "Login Fallback Triggered (Network/Timeout):",
-            error.message,
-          );
-          // Fallback: Network is slow -> Force Client Role so they can get in
-          const fallbackUser = { ...firebaseUser, role: "client" };
-          dispatch({ type: "SIGN_IN", payload: fallbackUser });
+          console.error("Error fetching user data:", error);
         }
       } else {
-        // No user logged in
-        dispatch({ type: "SIGN_OUT" });
+        setUser(null);
+        setUserRole(null);
       }
-
-      // Stop the global loading spinner (for the Splash Screen)
-      if (state.isLoading) {
-        dispatch({ type: "INITIAL_CHECK_DONE" });
-      }
+      setLoading(false);
     });
 
-    return unsubscribe;
+    return () => unsubscribe();
   }, []);
 
-  // --- ACTIONS ---
-
+  // 2. Sign Up Function (Matches your SignupScreen)
   const signUp = async (email, password, name, role, phone) => {
+    setIsLoading(true);
     try {
+      // Create Auth User
       const userCredential = await createUserWithEmailAndPassword(
         auth,
         email,
         password,
       );
-      const user = userCredential.user;
-
-      // Update Display Name
-      await updateProfile(user, { displayName: name });
+      const newUser = userCredential.user;
 
       // Save to Firestore
-      const userData = {
-        uid: user.uid,
-        email: user.email,
+      await setDoc(doc(db, "users", newUser.uid), {
+        uid: newUser.uid,
         displayName: name,
-        role: role || "client",
-        phone: phone || "",
+        email: email,
+        phoneNumber: phone,
+        role: role, // 'client' or 'tasker'
         createdAt: new Date().toISOString(),
-      };
+        isVerified: false,
+        walletBalance: 0,
+        rating: 5.0, // Default rating
+      });
 
-      await setDoc(doc(db, "users", user.uid), userData);
+      // Send Verification Email
+      await sendEmailVerification(newUser);
 
-      // Send Verification Email (Best effort, don't block if fails)
-      try {
-        await sendEmailVerification(user);
-      } catch (e) {
-        console.log("Email verification skipped:", e.message);
-      }
-
-      return user;
+      // Update Local State immediately so UI updates
+      setUserRole(role);
     } catch (error) {
+      // Throw error so Screen can catch it and alert user
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
+  // 3. Login Function (Matches your LoginScreen)
   const signInWithEmail = async (email, password) => {
+    setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
+      // onAuthStateChanged will handle the rest
     } catch (error) {
       throw error;
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const signOut = async () => {
+  // 4. Logout Function
+  const logout = async () => {
+    setIsLoading(true);
     try {
-      await firebaseSignOut(auth);
-      dispatch({ type: "SIGN_OUT" });
+      await signOut(auth);
+      setUser(null);
+      setUserRole(null);
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error(error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <AuthContext.Provider
-      value={{ ...state, signUp, signInWithEmail, signOut }}
+      value={{
+        user,
+        userRole,
+        loading, // For initial app load
+        isLoading, // For button spinners
+        signUp, // <--- Now exists!
+        signInWithEmail, // <--- Now exists!
+        logout,
+      }}
     >
       {children}
     </AuthContext.Provider>
   );
 };
 
-// 5. Custom Hook for easy access
 export const useAuth = () => useContext(AuthContext);

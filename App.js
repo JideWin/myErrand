@@ -1,47 +1,43 @@
-import React, { useCallback } from "react";
-import { View } from "react-native";
-import { NavigationContainer } from "@react-navigation/native";
-import { useFonts } from "expo-font";
-import * as SplashScreen from "expo-splash-screen";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import React, { useEffect, useState } from "react";
+import { View, ActivityIndicator } from "react-native";
 import { StatusBar } from "expo-status-bar";
-
-// --- IMPORTS ---
 import { AuthProvider } from "./scr/context/AuthContext";
-import AppNavigator from "./scr/navigation/AppNavigator"; // <--- This links to Payment Screen
-import { colors } from "./scr/components/theme";
-
-// Keep the splash screen visible while we fetch resources
-SplashScreen.preventAutoHideAsync();
+import AppNavigator from "./scr/navigation/AppNavigator";
+import { useFonts } from "expo-font";
+import {
+  Poppins_100Thin,
+  Poppins_300Light,
+  Poppins_400Regular,
+  Poppins_500Medium,
+  Poppins_600SemiBold,
+  Poppins_700Bold,
+  Poppins_800ExtraBold,
+} from "@expo-google-fonts/poppins";
 
 export default function App() {
-  // --- LOAD FONTS ---
-  const [fontsLoaded] = useFonts({
-    "Poppins-Regular": require("./assets/fonts/Poppins-Regular.ttf"),
-    "Poppins-Bold": require("./assets/fonts/Poppins-Bold.ttf"),
-    "Poppins-Medium": require("./assets/fonts/Poppins-Medium.ttf"),
-    "Poppins-SemiBold": require("./assets/fonts/Poppins-SemiBold.ttf"),
-    "Poppins-Light": require("./assets/fonts/Poppins-Light.ttf"),
+  // Load Fonts
+  let [fontsLoaded] = useFonts({
+    Poppins_100Thin,
+    Poppins_300Light,
+    Poppins_400Regular,
+    Poppins_500Medium,
+    Poppins_600SemiBold,
+    Poppins_700Bold,
+    Poppins_800ExtraBold,
   });
 
-  const onLayoutRootView = useCallback(async () => {
-    if (fontsLoaded) {
-      await SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded]);
-
   if (!fontsLoaded) {
-    return null;
+    return (
+      <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
+        <ActivityIndicator size="large" color="#008080" />
+      </View>
+    );
   }
 
   return (
-    <SafeAreaProvider onLayout={onLayoutRootView}>
-      <AuthProvider>
-        <NavigationContainer>
-          <StatusBar style="dark" />
-          <AppNavigator />
-        </NavigationContainer>
-      </AuthProvider>
-    </SafeAreaProvider>
+    <AuthProvider>
+      <StatusBar style="dark" />
+      <AppNavigator />
+    </AuthProvider>
   );
 }
