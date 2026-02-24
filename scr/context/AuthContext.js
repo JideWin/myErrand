@@ -19,6 +19,16 @@ export const AuthProvider = ({ children }) => {
 
   // 1. Monitor User Session
   useEffect(() => {
+    // 🛡️ CRITICAL SAFETY CHECK
+    // If firebase.js failed to load 'auth', we stop here instead of crashing the app.
+    if (!auth) {
+      console.error(
+        "AuthContext Error: 'auth' is undefined. Firebase init failed.",
+      );
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (authenticatedUser) => {
       if (authenticatedUser) {
         // Fetch extra user details (Role, Name) from Firestore
@@ -44,8 +54,10 @@ export const AuthProvider = ({ children }) => {
     return () => unsubscribe();
   }, []);
 
-  // 2. Sign Up Function (Matches your SignupScreen)
+  // 2. Sign Up Function
   const signUp = async (email, password, name, role, phone) => {
+    if (!auth) throw new Error("Firebase Auth not initialized");
+
     setIsLoading(true);
     try {
       // Create Auth User
@@ -70,7 +82,11 @@ export const AuthProvider = ({ children }) => {
       });
 
       // Send Verification Email
-      await sendEmailVerification(newUser);
+      try {
+        await sendEmailVerification(newUser);
+      } catch (emailError) {
+        console.log("Email verification skipped (dev mode):", emailError);
+      }
 
       // Update Local State immediately so UI updates
       setUserRole(role);
@@ -82,8 +98,10 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  // 3. Login Function (Matches your LoginScreen)
+  // 3. Login Function
   const signInWithEmail = async (email, password) => {
+    if (!auth) throw new Error("Firebase Auth not initialized");
+
     setIsLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -97,6 +115,8 @@ export const AuthProvider = ({ children }) => {
 
   // 4. Logout Function
   const logout = async () => {
+    if (!auth) return;
+
     setIsLoading(true);
     try {
       await signOut(auth);
@@ -116,8 +136,8 @@ export const AuthProvider = ({ children }) => {
         userRole,
         loading, // For initial app load
         isLoading, // For button spinners
-        signUp, // <--- Now exists!
-        signInWithEmail, // <--- Now exists!
+        signUp,
+        signInWithEmail,
         logout,
       }}
     >

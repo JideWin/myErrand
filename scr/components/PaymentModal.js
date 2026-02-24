@@ -1,9 +1,19 @@
 import React from "react";
-import { Modal, View, TouchableOpacity, StyleSheet, Alert } from "react-native";
+import {
+  Modal,
+  View,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  ActivityIndicator,
+} from "react-native";
 import { Paystack } from "react-native-paystack-webview";
 import { Ionicons } from "@expo/vector-icons";
-import { CustomText } from "./CustomText";
-import { colors } from "./theme";
+import { CustomText } from "./CustomText"; // Ensure this path matches your project
+import { colors } from "./theme"; // Ensure this path matches your project
+
+// ✅ YOUR PAYSTACK TEST KEY
+const PAYSTACK_PUBLIC_KEY = "pk_test_bffa0c790c3fe5f02e846a9bf39e28e3b95207bd";
 
 export default function PaymentModal({
   visible,
@@ -12,7 +22,7 @@ export default function PaymentModal({
   email,
   onSuccess,
 }) {
-  // Format amount for display (e.g. 5,000)
+  // Format amount for display (e.g. ₦5,000)
   const displayAmount = new Intl.NumberFormat("en-NG", {
     style: "currency",
     currency: "NGN",
@@ -38,20 +48,20 @@ export default function PaymentModal({
             <CustomText type="bold" style={styles.amount}>
               {displayAmount}
             </CustomText>
-            <View style={styles.badge}>
-              <Ionicons name="lock-closed" size={12} color="white" />
-              <CustomText style={styles.badgeText}>
+            <View style={styles.secureBadge}>
+              <Ionicons name="lock-closed" size={12} color="#008080" />
+              <CustomText style={styles.secureText}>
+                {" "}
                 Secured by Paystack
               </CustomText>
             </View>
           </View>
 
-          {/* The Paystack WebView */}
+          {/* Paystack Component (Hidden until active) */}
           <View style={{ flex: 1 }}>
             <Paystack
-              // ⚠️ REPLACE WITH YOUR ACTUAL PUBLIC KEY FROM PAYSTACK DASHBOARD
-              paystackKey="pk_test_bffa0c790c3fe5f02e846a9bf39e28e3b95207bd"
-              amount={amount} // Library handles conversion automatically usually, or sends as is.
+              paystackKey={PAYSTACK_PUBLIC_KEY}
+              amount={amount}
               billingEmail={email}
               currency="NGN"
               activityIndicatorColor={colors.primary}
@@ -60,12 +70,11 @@ export default function PaymentModal({
                   "Payment Cancelled",
                   "You cancelled the transaction.",
                 );
-                onClose(); // Just close modal
               }}
               onSuccess={(res) => {
-                // res contains transaction reference
+                // Return the full response so we can verify the reference ID in backend
                 onSuccess(res);
-                onClose(); // Close modal after success
+                onClose();
               }}
               autoStart={true}
             />
@@ -102,40 +111,39 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     padding: 5,
-    backgroundColor: colors.gray100,
+    backgroundColor: "#f5f5f5",
     borderRadius: 20,
   },
   infoContainer: {
     alignItems: "center",
     marginBottom: 20,
     padding: 20,
-    backgroundColor: colors.gray50,
+    backgroundColor: "#f9f9f9",
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: colors.gray200,
+    borderColor: "#eee",
   },
   label: {
     fontSize: 14,
-    color: colors.gray500,
+    color: "#666",
     marginBottom: 5,
   },
   amount: {
     fontSize: 32,
-    color: colors.gray900,
+    color: "#333",
     marginBottom: 10,
   },
-  badge: {
+  secureBadge: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#2DB06C", // Paystack green
+    backgroundColor: "#e0f2f1",
     paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 10,
+    borderRadius: 12,
   },
-  badgeText: {
-    color: "white",
+  secureText: {
     fontSize: 12,
-    marginLeft: 4,
-    fontFamily: "Poppins_500Medium",
+    color: "#008080",
+    fontWeight: "600",
   },
 });

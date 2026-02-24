@@ -1,14 +1,13 @@
-// src/screens/shared/LiveStreamScreen.js
 import React, { useRef, useState, useEffect } from "react";
 import {
   View,
-  Text,
   StyleSheet,
   TouchableOpacity,
   PermissionsAndroid,
   Platform,
   Alert,
   ActivityIndicator,
+  Text,
 } from "react-native";
 import createAgoraRtcEngine, {
   ChannelProfileType,
@@ -16,17 +15,23 @@ import createAgoraRtcEngine, {
   RtcSurfaceView,
 } from "react-native-agora";
 import { Ionicons } from "@expo/vector-icons";
-import { globalStyles } from "../../styles/GlobalStyles";
+// Ensure this path matches your project structure
+import { colors } from "../../styles/GlobalStyles";
 
-// REPLACE WITH YOUR AGORA APP ID
-const appId = "YOUR_AGORA_APP_ID";
+const appId = "7af54cf715bd47058c9216a7729f8b13"; // ✅Agora ID
 
 const LiveStreamScreen = ({ navigation, route }) => {
-  const { taskId, role } = route.params; // role: 'broadcaster' (Tasker) or 'audience' (Client)
+  // Default to 'audience' if no params provided for safety
+  const { taskId, role } = route.params || {
+    taskId: "test_channel",
+    role: "audience",
+  };
+
   const agoraEngineRef = useRef(null);
   const [isJoined, setIsJoined] = useState(false);
-  const [remoteUid, setRemoteUid] = useState(0);
+  const [remoteUid, setRemoteUid] = useState(0); // 0 = no remote user yet
   const [isMuted, setIsMuted] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     setupVideoSDKEngine();
@@ -37,79 +42,57 @@ const LiveStreamScreen = ({ navigation, route }) => {
 
   const setupVideoSDKEngine = async () => {
     try {
+      // 1. Request Permissions (Android)
       if (Platform.OS === "android") {
         await getPermission();
       }
 
+      // 2. Create Engine
       agoraEngineRef.current = createAgoraRtcEngine();
-      const agoraEngine = agoraEngineRef.current;
+      const engine = agoraEngineRef.current;
 
-      agoraEngine.initialize({ appId: appId });
-      agoraEngine.enableVideo();
+      engine.registerEventHandler({
+        onJoinChannelSuccess: () => {
+          setIsJoined(true);
+          setIsLoading(false);
+          console.log("Successfully joined the channel " + taskId);
+        },
+        onUserJoined: (_connection, uid) => {
+          console.log("Remote user joined: " + uid);
+          setRemoteUid(uid);
+        },
+        onUserOffline: (_connection, uid) => {
+          console.log("Remote user left: " + uid);
+          setRemoteUid(0);
+        },
+        onError: (err) => {
+          console.error("Agora Error: ", err);
+        },
+      });
 
+      engine.initialize({
+        appId: appId,
+        channelProfile: ChannelProfileType.ChannelProfileLiveBroadcasting,
+      });
+
+      engine.enableVideo();
+
+      // 3. Set Role (Broadcaster = Tasker, Audience = Client)
       if (role === "broadcaster") {
-        // Tasker settings: Better quality for transparency
-        agoraEngine.setChannelProfile(
-          ChannelProfileType.ChannelProfileLiveBroadcasting,
-        );
-        agoraEngine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
-        agoraEngine.startPreview();
+        engine.setClientRole(ClientRoleType.ClientRoleBroadcaster);
+        await engine.startPreview();
       } else {
-        // Client settings: Low latency for monitoring
-        agoraEngine.setChannelProfile(
-          ChannelProfileType.ChannelProfileLiveBroadcasting,
-        );
-        agoraEngine.setClientRole(ClientRoleType.ClientRoleAudience);
+        engine.setClientRole(ClientRoleType.ClientRoleAudience);
       }
 
-      // Event Listeners
-      agoraEngine.addListener("onUserJoined", (connection, uid) => {
-        console.log("Remote user joined:", uid);
-        setRemoteUid(uid);
-      });
-
-      agoraEngine.addListener("onUserOffline", (connection, uid) => {
-        console.log("Remote user left:", uid);
-        setRemoteUid(0);
-        Alert.alert("Stream Ended", "The Tasker has stopped the live stream.");
-        navigation.goBack();
-      });
-
-      agoraEngine.addListener("onJoinChannelSuccess", (connection, uid) => {
-        console.log("Successfully joined channel:", uid);
-        setIsJoined(true);
-      });
-
-      // Join the channel (Channel Name = taskId)
-      join();
+      // 4. Join Channel
+      // Token is null for testing. In production, use a token server.
+      engine.joinChannel("", taskId, 0, {});
     } catch (e) {
       console.error(e);
+      Alert.alert("Error", "Failed to start video stream.");
+      setIsLoading(false);
     }
-  };
-
-  const join = async () => {
-    try {
-      // Use null for token (only for testing - use server token in production)
-      agoraEngineRef.current?.joinChannel("", taskId, 0, {});
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const leave = () => {
-    try {
-      agoraEngineRef.current?.leaveChannel();
-      setRemoteUid(0);
-      setIsJoined(false);
-      navigation.goBack();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const toggleMute = () => {
-    agoraEngineRef.current?.muteLocalAudioStream(!isMuted);
-    setIsMuted(!isMuted);
   };
 
   const getPermission = async () => {
@@ -121,66 +104,85 @@ const LiveStreamScreen = ({ navigation, route }) => {
     }
   };
 
+  const leave = () => {
+    try {
+      agoraEngineRef.current?.leaveChannel();
+      agoraEngineRef.current?.release();
+      setRemoteUid(0);
+      setIsJoined(false);
+      navigation.goBack();
+    } catch (e) {
+      console.error("Leave error:", e);
+    }
+  };
+
+  const toggleMute = () => {
+    const engine = agoraEngineRef.current;
+    engine?.muteLocalAudioStream(!isMuted);
+    setIsMuted(!isMuted);
+  };
+
+  if (isLoading) {
+    return (
+      <View style={styles.waitingContainer}>
+        <ActivityIndicator size="large" color="#008080" />
+        <Text style={styles.waitingText}>Connecting to Secure Stream...</Text>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
-      {/* HEADER */}
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={leave} style={styles.closeBtn}>
           <Ionicons name="close" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {role === "broadcaster" ? "You are Live" : "Watching Tasker"}
+          {role === "broadcaster" ? "You are Live" : "Tasker Live View"}
         </Text>
         <View style={styles.liveBadge}>
           <Text style={styles.liveText}>LIVE</Text>
         </View>
       </View>
 
-      {/* VIDEO VIEW */}
+      {/* Video View Area */}
       <View style={styles.videoContainer}>
-        {isJoined ? (
+        {/* If Broadcaster: Show Local View */}
+        {role === "broadcaster" ? (
           <React.Fragment>
-            {role === "broadcaster" ? (
-              // Local View (Tasker)
-              <RtcSurfaceView canvas={{ uid: 0 }} style={styles.videoView} />
-            ) : // Remote View (Client)
-            remoteUid !== 0 ? (
-              <RtcSurfaceView
-                canvas={{ uid: remoteUid }}
-                style={styles.videoView}
-              />
-            ) : (
-              <View style={styles.waitingContainer}>
-                <ActivityIndicator size="large" color="#fff" />
-                <Text style={styles.waitingText}>
-                  Waiting for Tasker to start stream...
-                </Text>
-              </View>
-            )}
+            <RtcSurfaceView canvas={{ uid: 0 }} style={styles.videoView} />
+            {/* Controls for Tasker */}
+            <View style={styles.controls}>
+              <TouchableOpacity onPress={toggleMute} style={styles.controlBtn}>
+                <Ionicons
+                  name={isMuted ? "mic-off" : "mic"}
+                  size={28}
+                  color="#fff"
+                />
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={leave}
+                style={[styles.controlBtn, styles.endBtn]}
+              >
+                <Ionicons name="stop" size={28} color="#fff" />
+              </TouchableOpacity>
+            </View>
           </React.Fragment>
+        ) : // If Audience: Show Remote View
+        remoteUid !== 0 ? (
+          <RtcSurfaceView
+            canvas={{ uid: remoteUid }}
+            style={styles.videoView}
+          />
         ) : (
-          <ActivityIndicator size="large" color="#000" />
+          <View style={styles.waitingContainer}>
+            <Text style={styles.waitingText}>
+              Waiting for Tasker to start video...
+            </Text>
+          </View>
         )}
       </View>
-
-      {/* CONTROLS (Only for Tasker) */}
-      {role === "broadcaster" && (
-        <View style={styles.controls}>
-          <TouchableOpacity onPress={toggleMute} style={styles.controlBtn}>
-            <Ionicons
-              name={isMuted ? "mic-off" : "mic"}
-              size={28}
-              color="#fff"
-            />
-          </TouchableOpacity>
-          <TouchableOpacity
-            onPress={leave}
-            style={[styles.controlBtn, styles.endBtn]}
-          >
-            <Ionicons name="stop" size={28} color="#fff" />
-          </TouchableOpacity>
-        </View>
-      )}
     </View>
   );
 };
@@ -196,6 +198,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
+    justifyContent: "space-between",
   },
   closeBtn: {
     padding: 8,
@@ -206,8 +209,8 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
-    marginLeft: 15,
     flex: 1,
+    textAlign: "center",
   },
   liveBadge: {
     backgroundColor: "red",
@@ -218,7 +221,12 @@ const styles = StyleSheet.create({
   liveText: { color: "#fff", fontSize: 10, fontWeight: "bold" },
   videoContainer: { flex: 1 },
   videoView: { flex: 1 },
-  waitingContainer: { flex: 1, justifyContent: "center", alignItems: "center" },
+  waitingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "#222",
+  },
   waitingText: { color: "#fff", marginTop: 10 },
   controls: {
     position: "absolute",
@@ -228,18 +236,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    zIndex: 100,
   },
   controlBtn: {
-    width: 60,
-    height: 60,
+    backgroundColor: "rgba(0,0,0,0.6)",
+    padding: 15,
     borderRadius: 30,
-    backgroundColor: "rgba(255,255,255,0.2)",
-    justifyContent: "center",
-    alignItems: "center",
-    marginHorizontal: 20,
+    marginHorizontal: 15,
   },
-  endBtn: { backgroundColor: "#ef4444" },
+  endBtn: {
+    backgroundColor: "#ff4444",
+  },
 });
 
 export default LiveStreamScreen;
